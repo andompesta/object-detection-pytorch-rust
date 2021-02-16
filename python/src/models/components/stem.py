@@ -34,7 +34,7 @@ class BasicStem(nn.Module):
             raise NotImplementedError(f"Norm {norm} non implemented in Stem Layer")
 
     def forward(self, x: Tensor) -> Tensor:
-        x = self.conv1(x)
+        x = self.conv(x)
         x = self.bn(x)
 
         x = F.relu(x)

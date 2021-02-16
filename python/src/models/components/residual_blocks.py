@@ -64,7 +64,7 @@ class ResidualBlock18(nn.Module):
         out = self.bn2(out)
 
         if self.downsample is not None:
-            shortcut = self.shortcut(x)
+            shortcut = self.downsample(x)
         else:
             shortcut = x
 

@@ -57,5 +57,5 @@ class BaseModel(torch.nn.Module):
         else:
             raise NotImplementedError()
 
-        model.load_state_dict(state_dict, strict=strict)
+        print(model.load_state_dict(state_dict, strict=strict))
         return model
