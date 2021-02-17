@@ -1,7 +1,18 @@
-""" XLM-RoBERTa configuration """
-
 from python.src.config import BaseConf
 from python.src.utils import ShapeSpec, LayerSpec
+
+from typing import List
+
+class ResNetStageConf(object):
+    def __init__(
+            self,
+            block_shapes: List[List[ShapeSpec]],
+            use_bias: bool = False,
+            norm: str = "BN"
+    ):
+        self.block_shapes = block_shapes
+        self.use_bias = use_bias
+        self.norm = norm
 
 
 class ResNet18Conf(BaseConf):
@@ -15,57 +26,49 @@ class ResNet18Conf(BaseConf):
             stem_norm: str = "BN",
             stem_use_bias: bool = False,
             layers=[
-                LayerSpec(
-                    block_shapes=(
-                            [
-                                ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1),
-                                ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ], [
-                                ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1),
-                                ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ]
-                    ),
-                    use_bias=False,
-                    norm="BN"
+                ResNetStageConf(
+                    block_shapes=[
+                        [
+                            ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1),
+                            ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ], [
+                            ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1),
+                            ShapeSpec(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ]
+                    ]
                 ),
-                LayerSpec(
-                    block_shapes=(
-                            [
-                                ShapeSpec(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1, dilation=1),
-                                ShapeSpec(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ], [
-                                ShapeSpec(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, dilation=1),
-                                ShapeSpec(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ]
-                    ),
-                    use_bias=False,
-                    norm="BN"
+                ResNetStageConf(
+                    block_shapes=[
+                        [
+                            ShapeSpec(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1, dilation=1),
+                            ShapeSpec(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ], [
+                            ShapeSpec(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, dilation=1),
+                            ShapeSpec(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ]
+                    ]
                 ),
-                LayerSpec(
-                    block_shapes=(
-                            [
-                                ShapeSpec(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1, dilation=1),
-                                ShapeSpec(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ], [
-                                ShapeSpec(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, dilation=1),
-                                ShapeSpec(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ]
-                    ),
-                    use_bias=False,
-                    norm="BN"
+                ResNetStageConf(
+                    block_shapes=[
+                        [
+                            ShapeSpec(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1, dilation=1),
+                            ShapeSpec(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ], [
+                            ShapeSpec(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, dilation=1),
+                            ShapeSpec(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ]
+                    ]
                 ),
-                LayerSpec(
-                    block_shapes=(
-                            [
-                                ShapeSpec(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1, dilation=1),
-                                ShapeSpec(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ], [
-                                ShapeSpec(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, dilation=1),
-                                ShapeSpec(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, dilation=1)
-                            ]
-                    ),
-                    use_bias=False,
-                    norm="BN"
+                ResNetStageConf(
+                    block_shapes=[
+                        [
+                            ShapeSpec(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1, dilation=1),
+                            ShapeSpec(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ], [
+                            ShapeSpec(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, dilation=1),
+                            ShapeSpec(in_channels=512, out_channels=512, kernel_size=3, stride=1, padding=1, dilation=1)
+                        ]
+                    ]
                 )
             ],
             avgpool_size: int = 1,

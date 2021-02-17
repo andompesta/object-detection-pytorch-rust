@@ -1,5 +1,7 @@
 from torch import nn, Tensor
 from os import path
+import numpy as np
+
 
 from python.src.config import ResNet18Conf
 from python.src.models import Backbone, BaseModel
@@ -19,14 +21,31 @@ class ResNet18(BaseModel, Backbone):
             use_bias=conf.stem_use_bias
         )
 
+        self._out_feature_strides = dict(
+            stem=conf.stem_conv_shape.stride
+        )
+        current_stride = conf.stem_conv_shape.stride
+        self._out_feature_channels = dict(
+            stem=conf.stem_conv_shape.out_channels
+        )
+
         layers = [ResidualBlock18.build_stage(l) for l in conf.layers]
 
-        for idx, layer in enumerate(layers):
-            setattr(self, f"layer{idx+1}", layer)
+        for idx, (layer_cfg, layer) in enumerate(zip(conf.layers, layers)):
+            name = f"layer{idx+1}"
+            setattr(self, name, layer)
 
-        self.avgpool = nn.AdaptiveAvgPool2d(conf.avgpool_size)
-        self.fc = nn.Linear(conf.layers[-1].block_shapes[-1][-1].out_channels, conf.num_classes)
-        self.flatten = nn.Flatten(1)
+            self._out_feature_strides[name] = current_stride = int(
+                current_stride * np.prod([k[0].stride for k in layer_cfg.block_shapes])
+            )
+            self._out_feature_channels[name] = curr_channels = layer_cfg.block_shapes[-1][-1].out_channels
+
+        if conf.num_classes is not None:
+            self.avgpool = nn.AdaptiveAvgPool2d(conf.avgpool_size)
+            self.fc = nn.Linear(curr_channels, conf.num_classes)
+            self.flatten = nn.Flatten(1)
+
+
 
     def forward(
             self,
@@ -39,9 +58,10 @@ class ResNet18(BaseModel, Backbone):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        x = self.avgpool(x)
-        x = self.flatten(x)
-        x = self.fc(x)
+        if self.conf.num_classes is not None:
+            x = self.avgpool(x)
+            x = self.flatten(x)
+            x = self.fc(x)
 
         return x
 

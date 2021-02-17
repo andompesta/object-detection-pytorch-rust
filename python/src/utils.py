@@ -5,6 +5,7 @@ import torch
 import shutil
 from os import path, makedirs
 from collections import namedtuple
+import cv2
 
 ShapeSpec = namedtuple("ShapeSpec", [
     "in_channels",
@@ -48,3 +49,10 @@ def save_checkpoint(path_:str, state: typing.Dict, is_best: bool, filename="chec
     torch.save(state, ensure_dir(path.join(path_, filename)))
     if is_best:
         shutil.copy(path.join(path_, filename), path.join(path_, "model_best.pth.tar"))
+
+def show_image(path_: str):
+    im = cv2.imread(path_)
+    cv2.imshow("image", im)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    return im

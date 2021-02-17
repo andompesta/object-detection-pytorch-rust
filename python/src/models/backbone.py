@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from abc import ABCMeta, abstractmethod
-from python.src.utils import ShapeSpec
 
 class Backbone(nn.Module, metaclass=ABCMeta):
     def __init__(self):
