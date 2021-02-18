@@ -1,7 +1,7 @@
-from typing import List
+from typing import Tuple
 import torch
 
-from python.src.models.utils import nonzero_tuple
+from python.src.utils import nonzero_tuple
 from python.src.config import AnchorMatcherConf
 
 class Matcher(object):
@@ -24,30 +24,30 @@ class Matcher(object):
     ):
 
         # Add -inf and +inf to first and last position in thresholds
-        thresholds = conf.thresholds[:]
-        assert thresholds[0] > 0
-        thresholds.insert(0, -float("inf"))
-        thresholds.append(float("inf"))
+        iou_thresholds = conf.iou_thresholds[:]
+        assert iou_thresholds[0] > 0
+        iou_thresholds.insert(0, -float("inf"))
+        iou_thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
-        assert all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])])
-        assert all([l in [-1, 0, 1] for l in conf.labels])
-        assert len(conf.labels) == len(thresholds) - 1
-        self.thresholds = thresholds
-        self.labels = conf.labels
+        assert all([low <= high for (low, high) in zip(iou_thresholds[:-1], iou_thresholds[1:])])
+        assert all([l in [-1, 0, 1] for l in conf.iou_labels])
+        assert len(conf.iou_labels) == len(iou_thresholds) - 1
+        self.iou_thresholds = iou_thresholds
+        self.iou_labels = conf.iou_labels
         self.allow_low_quality_matches = conf.allow_low_quality_matches
 
-    def __call__(self, match_quality_matrix):
+    def __call__(
+            self,
+            match_quality_matrix: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Args:
-            match_quality_matrix (Tensor[float]): an MxN tensor, containing the
-                pairwise quality between M ground-truth elements and N predicted
-                elements. All elements must be >= 0 (due to the us of `torch.nonzero`
-                for selecting indices in :meth:`set_low_quality_matches_`).
-        Returns:
-            matches (Tensor[int64]): a vector of length N, where matches[i] is a matched
-                ground-truth index in [0, M)
-            match_labels (Tensor[int8]): a vector of length N, where pred_labels[i] indicates
-                whether a prediction is a true or false positive or ignored
+
+        :param match_quality_matrix: a MxN matrix containing the pairwise quality between M ground-truth elements and
+            N predicted elements.
+        :return:
+            - a vector of length N, where matches[i] is a matched ground-truth index in [0, M)
+            - a vector of length N, where pred_labels[i] indicates whether a prediction is a true or false positive or
+            ignored
         """
         assert match_quality_matrix.dim() == 2
         if match_quality_matrix.numel() == 0:
@@ -58,7 +58,7 @@ class Matcher(object):
             # to `self.labels[0]`, which usually defaults to background class 0
             # To choose to ignore instead, can make labels=[-1,0,-1,1] + set appropriate thresholds
             default_match_labels = match_quality_matrix.new_full(
-                (match_quality_matrix.size(1),), self.labels[0], dtype=torch.int8
+                (match_quality_matrix.size(1),), self.iou_labels[0], dtype=torch.int8
             )
             return default_matches, default_match_labels
 
@@ -70,7 +70,7 @@ class Matcher(object):
 
         match_labels = matches.new_full(matches.size(), 1, dtype=torch.int8)
 
-        for (l, low, high) in zip(self.labels, self.thresholds[:-1], self.thresholds[1:]):
+        for (l, low, high) in zip(self.iou_labels, self.iou_thresholds[:-1], self.iou_thresholds[1:]):
             low_high = (matched_vals >= low) & (matched_vals < high)
             match_labels[low_high] = l
 
@@ -79,7 +79,11 @@ class Matcher(object):
 
         return matches, match_labels
 
-    def set_low_quality_matches_(self, match_labels, match_quality_matrix):
+    def set_low_quality_matches_(
+            self,
+            match_labels: torch.Tensor,
+            match_quality_matrix: torch.Tensor
+    ) -> None:
         """
         Produce additional matches for predictions that have only low-quality matches.
         Specifically, for each ground-truth G find the set of predictions that have

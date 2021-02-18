@@ -4,13 +4,15 @@ import math
 from torch import nn
 from typing import List, Union, Tuple
 from collections.abc import Sequence
+from einops import rearrange
 
 from python.src.config import AnchorGeneratorConf
-from python.src.models import Boxes
+from python.src.structures import Boxes
 
 class BufferList(nn.Module):
     """
-    Similar to nn.ParameterList, but for buffers
+    Similar to nn.ParameterList, but for buffers. There are tensor but not trainable variable.
+    Thus are keep inside the model, but not traced
     """
 
     def __init__(self, buffers):
@@ -78,7 +80,7 @@ def _broadcast_params(
     return params
 
 
-class DefaultAnchorGenerator(nn.Module):
+class AnchorGenerator(nn.Module):
     box_dim: torch.jit.Final[int] = 4
     """
     the dimension of each anchor box.
@@ -104,6 +106,8 @@ class DefaultAnchorGenerator(nn.Module):
 
         self.offset = conf.offset
         assert 0.0 <= self.offset < 1.0, self.offset
+        assert conf.box_dim == AnchorGenerator.box_dim, \
+            f"configuration box dimension {conf.box_dim} \t vs \t class box dimension{AnchorGenerator.box_dim}"
 
     def _calculate_anchors(
             self,
@@ -158,9 +162,12 @@ class DefaultAnchorGenerator(nn.Module):
         buffers: List[torch.Tensor] = [x[1] for x in self.cell_anchors.named_buffers()]
         for size, stride, base_anchors in zip(grid_sizes, self.strides, buffers):
             shift_x, shift_y = _create_grid_offsets(size, stride, self.offset, base_anchors.device)
-            shifts = torch.stack((shift_x, shift_y, shift_x, shift_y), dim=1)
+            shifts = torch.stack((shift_x, shift_y, shift_x, shift_y), dim=1).unsqueeze(1)
+            base_anchors = base_anchors.unsqueeze(0)
 
-            anchors.append((shifts.view(-1, 1, 4) + base_anchors.view(1, -1, 4)).reshape(-1, 4))
+            anchors.append(rearrange(shifts + base_anchors, "b d c -> (b d) c"))
+
+            # anchors.append((shifts.view(-1, 1, 4) + base_anchors.view(1, -1, 4)).reshape(-1, 4))
 
         return anchors
 

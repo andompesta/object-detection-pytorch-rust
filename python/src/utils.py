@@ -16,11 +16,39 @@ ShapeSpec = namedtuple("ShapeSpec", [
     "dilation",
 ])
 
+RpnLossSpec = namedtuple("RpnLossSpec", [
+    "cls_loss",
+    "loc_loss"
+])
+
 LayerSpec = namedtuple("LayerSpec", [
     "block_shapes",
     "use_bias",
     "norm"
 ])
+
+
+def cat(tensors: typing.List[torch.Tensor], dim: int = 0):
+    """
+    Efficient version of torch.cat that avoids a copy if there is only a single element in a list
+    """
+    assert isinstance(tensors, (list, tuple))
+    if len(tensors) == 1:
+        return tensors[0]
+    return torch.cat(tensors, dim)
+
+
+def nonzero_tuple(x):
+    """
+    A 'as_tuple=True' version of torch.nonzero to support torchscript.
+    because of https://github.com/pytorch/pytorch/issues/38718
+    """
+    if torch.jit.is_scripting():
+        if x.dim() == 0:
+            return x.unsqueeze(0).nonzero().unbind(1)
+        return x.nonzero().unbind(1)
+    else:
+        return x.nonzero(as_tuple=True)
 
 def ensure_dir(path_: str) -> str:
     dir = path.dirname(path_)

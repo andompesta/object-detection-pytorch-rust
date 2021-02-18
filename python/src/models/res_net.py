@@ -5,7 +5,7 @@ import numpy as np
 
 from python.src.config import ResNet18Conf
 from python.src.models import Backbone, BaseModel
-from python.src.models.components import BasicStem, ResidualBlock18
+from python.src.models.modules import BasicStem, ResidualBlock18
 
 class ResNet18(BaseModel, Backbone):
     def __init__(
@@ -29,7 +29,7 @@ class ResNet18(BaseModel, Backbone):
             stem=conf.stem_conv_shape.out_channels
         )
 
-        layers = [ResidualBlock18.build_stage(l) for l in conf.layers]
+        layers = [ResidualBlock18.build(l) for l in conf.layers]
 
         for idx, (layer_cfg, layer) in enumerate(zip(conf.layers, layers)):
             name = f"layer{idx+1}"

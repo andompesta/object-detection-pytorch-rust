@@ -1,6 +1,5 @@
 from typing import List, Tuple
 import torch
-from torch import device
 
 class Boxes(object):
     """
@@ -158,7 +157,7 @@ class Boxes(object):
         return cat_boxes
 
     @property
-    def device(self) -> device:
+    def device(self) -> torch.device:
         return self.tensor.device
 
     # type "Iterator[torch.Tensor]", yield, and iter() not supported by torchscript
@@ -169,3 +168,92 @@ class Boxes(object):
         Yield a box as a Tensor of shape (4,) at a time.
         """
         yield from self.tensor
+
+
+def pairwise_intersection(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
+    """
+    Given two lists of boxes of size N and M,
+    compute the intersection area between __all__ N x M pairs of boxes.
+    The box order must be (xmin, ymin, xmax, ymax)
+    Args:
+        boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
+    Returns:
+        Tensor: intersection, sized [N,M].
+    """
+    boxes1, boxes2 = boxes1.tensor, boxes2.tensor
+    width_height = torch.min(boxes1[:, None, 2:], boxes2[:, 2:]) - torch.max(
+        boxes1[:, None, :2], boxes2[:, :2]
+    )  # [N,M,2]
+
+    width_height.clamp_(min=0)  # [N,M,2]
+    intersection = width_height.prod(dim=2)  # [N,M]
+    return intersection
+
+
+def pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
+    """
+    Given two lists of boxes of size N and M,
+    compute the IoU (intersection over union)
+    between __all__ N x M pairs of boxes.
+    The box order must be (xmin, ymin, xmax, ymax).
+    Args:
+        boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
+    Returns:
+        Tensor: IoU, sized [N,M].
+    """
+    area1 = boxes1.area()  # [N]
+    area2 = boxes2.area()  # [M]
+    inter = pairwise_intersection(boxes1, boxes2)
+
+    # handle empty boxes
+    iou = torch.where(
+        inter > 0,
+        inter / (area1[:, None] + area2 - inter),
+        torch.zeros(1, dtype=inter.dtype, device=inter.device),
+    )
+    return iou
+
+
+def pairwise_ioa(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
+    """
+    Similar to pariwise_iou but compute the IoA (intersection over boxes2 area).
+    Args:
+        boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
+    Returns:
+        Tensor: IoA, sized [N,M].
+    """
+    area2 = boxes2.area()  # [M]
+    inter = pairwise_intersection(boxes1, boxes2)
+
+    # handle empty boxes
+    ioa = torch.where(
+        inter > 0, inter / area2, torch.zeros(1, dtype=inter.dtype, device=inter.device)
+    )
+    return ioa
+
+
+def matched_boxlist_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
+    """
+    Compute pairwise intersection over union (IOU) of two sets of matched
+    boxes. The box order must be (xmin, ymin, xmax, ymax).
+    Similar to boxlist_iou, but computes only diagonal elements of the matrix
+    Args:
+        boxes1: (Boxes) bounding boxes, sized [N,4].
+        boxes2: (Boxes) bounding boxes, sized [N,4].
+    Returns:
+        Tensor: iou, sized [N].
+    """
+    assert len(boxes1) == len(
+        boxes2
+    ), "boxlists should have the same" "number of entries, got {}, {}".format(
+        len(boxes1), len(boxes2)
+    )
+    area1 = boxes1.area()  # [N]
+    area2 = boxes2.area()  # [N]
+    box1, box2 = boxes1.tensor, boxes2.tensor
+    lt = torch.max(box1[:, :2], box2[:, :2])  # [N,2]
+    rb = torch.min(box1[:, 2:], box2[:, 2:])  # [N,2]
+    wh = (rb - lt).clamp(min=0)  # [N,2]
+    inter = wh[:, 0] * wh[:, 1]  # [N]
+    iou = inter / (area1 + area2 - inter)  # [N]
+    return iou

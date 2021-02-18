@@ -2,11 +2,11 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 from python.src.utils import ShapeSpec
 from python.src.config import ResNetStageConf
+from python.src.models import InitModule
 from typing import List
-from abc import ABCMeta, abstractmethod
 
 
-class ResidualBlock(nn.Module, metaclass=ABCMeta):
+class ResidualBlock(InitModule):
     def __init__(
             self,
             conv_shapes: List[ShapeSpec],
@@ -19,7 +19,7 @@ class ResidualBlock(nn.Module, metaclass=ABCMeta):
         self.norm = norm
 
     @classmethod
-    def build_stage(
+    def build(
             cls,
             stage_cfg: ResNetStageConf
     ):
@@ -76,6 +76,20 @@ class ResidualBlock50(ResidualBlock):
         else:
             self.downsample = None
 
+    def _init_weights_(self, module: nn.Module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+
+        elif isinstance(module, nn.BatchNorm2d):
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
+
+        else:
+            raise AttributeError(f"unexpected parameter found \n {module}")
+
+
     def forward(
             self,
             x: Tensor
@@ -101,9 +115,6 @@ class ResidualBlock50(ResidualBlock):
         out += shortcut
         out = F.relu(out)
         return out
-
-
-
 
 
 class ResidualBlock18(ResidualBlock):
@@ -170,3 +181,16 @@ class ResidualBlock18(ResidualBlock):
         out += shortcut
         out = F.relu(out)
         return out
+
+    def _init_weights_(self, module: nn.Module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+
+        elif isinstance(module, nn.BatchNorm2d):
+            nn.init.constant_(module.weight, 1)
+            nn.init.constant_(module.bias, 0)
+
+        else:
+            raise AttributeError(f"unexpected parameter found \n {module}")

@@ -1,12 +1,9 @@
-from .stem import BasicStem
-from .residual_blocks import ResidualBlock18, ResidualBlock50
-from .anchor_generator import DefaultAnchorGenerator
+from .box_regression import Box2BoxTransform, _dense_box_regression_loss
 from .anchor_matcher import Matcher
 
+
 __all__ = [
-    "BasicStem",
-    "ResidualBlock18",
-    "ResidualBlock50",
-    "DefaultAnchorGenerator",
-    "Matcher"
+    "Box2BoxTransform",
+    "Matcher",
+    "_dense_box_regression_loss"
 ]

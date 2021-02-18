@@ -1,23 +1,16 @@
 import torch
-from abc import abstractmethod
+from abc import abstractmethod, ABCMeta
 from typing import Optional
 from os import path
 from shutil import copyfile
 
 from python.src.config import BaseConf
-from python.src.utils import save_checkpoint, ensure_dir
+from python.src.utils import ensure_dir
 
 
-
-class BaseModel(torch.nn.Module):
-    def __init__(
-            self,
-            conf: BaseConf,
-            **kw
-    ):
-        super(BaseModel, self).__init__()
-        self.conf = conf
-        self.name = conf.name
+class InitModule(torch.nn.Module, metaclass=ABCMeta):
+    def __init__(self, *args, **kwargs):
+        super(InitModule, self).__init__()
 
     def init_weights(self) -> None:
         """Initialize weights if needed."""
@@ -28,6 +21,16 @@ class BaseModel(torch.nn.Module):
         """Child model has to define the initialization policy."""
         ...
 
+
+class BaseModel(InitModule):
+    def __init__(
+            self,
+            conf: BaseConf,
+            **kw
+    ):
+        super(BaseModel, self).__init__()
+        self.conf = conf
+        self.name = conf.name
 
     def save(
             self,
