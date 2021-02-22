@@ -1,11 +1,13 @@
 from torch import nn, Tensor
 from os import path
 import numpy as np
-
+from collections import OrderedDict
+from typing import Dict
 
 from python.src.config import ResNet18Conf
 from python.src.models import Backbone, BaseModel
 from python.src.models.modules import BasicStem, ResidualBlock18
+from python.src.utils import ShapeSpec
 
 class ResNet18(BaseModel, Backbone):
     def __init__(
@@ -20,61 +22,56 @@ class ResNet18(BaseModel, Backbone):
             norm=conf.stem_norm,
             use_bias=conf.stem_use_bias
         )
-
-        self._out_feature_strides = dict(
-            stem=conf.stem_conv_shape.stride
-        )
-        current_stride = conf.stem_conv_shape.stride
-        self._out_feature_channels = dict(
-            stem=conf.stem_conv_shape.out_channels
-        )
+        
+        current_stride = conf.stem_conv_shape.stride * conf.stem_pool_shape.stride
+        self._out_feature_strides["stem"] = current_stride
+        self._out_feature_channels["stem"] = conf.stem_conv_shape.out_channels
+        self._out_features = conf.out_features
 
         layers = [ResidualBlock18.build(l) for l in conf.layers]
-
+        self.layers_name = []
         for idx, (layer_cfg, layer) in enumerate(zip(conf.layers, layers)):
-            name = f"layer{idx+1}"
-            setattr(self, name, layer)
+            name = f"res{idx+1}"
+            self.add_module(name, layer)
 
             self._out_feature_strides[name] = current_stride = int(
                 current_stride * np.prod([k[0].stride for k in layer_cfg.block_shapes])
             )
             self._out_feature_channels[name] = curr_channels = layer_cfg.block_shapes[-1][-1].out_channels
 
-        if conf.num_classes is not None:
+            self.layers_name.append(name)
+
+        if hasattr(conf, "num_classes"):
             self.avgpool = nn.AdaptiveAvgPool2d(conf.avgpool_size)
             self.fc = nn.Linear(curr_channels, conf.num_classes)
             self.flatten = nn.Flatten(1)
-
-
-
+        
+    
     def forward(
             self,
             x: Tensor
-    ) -> Tensor:
+    ) -> Dict[str, Tensor]:
+        output = OrderedDict()
         x = self.stem(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        for name in self.layers_name:
+            layer = getattr(self, name)
+            x = layer(x)
 
-        if self.conf.num_classes is not None:
+            if name in self._out_features:
+                output[name] = x
+
+        if hasattr(self.conf, "num_classes"):
             x = self.avgpool(x)
             x = self.flatten(x)
             x = self.fc(x)
+            output["logits"] = x
 
-        return x
+        return output
 
     def _init_weights_(self, m: nn.Module):
-        if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-
-        elif isinstance(m, nn.BatchNorm2d):
-            nn.init.constant_(m.weight, 1)
-            nn.init.constant_(m.bias, 0)
-
+        if hasattr(m, "init_weights"):
+            m.init_weights()
         elif isinstance(m, nn.Linear):
             nn.init.normal_(m.weight, mean=0, std=0.02)
             if m.bias is not None:
@@ -83,7 +80,19 @@ class ResNet18(BaseModel, Backbone):
         else:
             print(f"--> forward init for module {m}")
 
-
+    def output_shapes(self) -> Dict[str, ShapeSpec]:
+        return OrderedDict([
+            (name, ShapeSpec(
+                out_channels=self._out_feature_channels[name],
+                stride=self._out_feature_strides[name],
+                in_channels=None,
+                padding=None,
+                dilation=None,
+                kernel_size=None
+            ))
+            for name in self._out_features
+        ])
+        
 if __name__ == '__main__':
     conf = ResNet18Conf(num_classes=1000)
 
@@ -94,7 +103,6 @@ if __name__ == '__main__':
 
     import torch
     from dynaconf import settings
-    from collections import OrderedDict
     model_hb = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
     state_dict = model_hb.state_dict()
 

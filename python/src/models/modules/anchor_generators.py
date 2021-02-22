@@ -88,17 +88,20 @@ class AnchorGenerator(nn.Module):
 
     def __init__(
             self,
-            conf: AnchorGeneratorConf
+            conf: AnchorGeneratorConf,
+            strides: List[int]
     ):
         """
         Compute anchors in the standard ways described in "Faster R-CNN: Towards Real-Time Object Detection with Region
          Proposal Networks".
 
         :param conf: configuration of the anchor generator
+        :param strides: stride of each input feature.
+
         """
         super().__init__()
 
-        self.strides = conf.strides
+        self.strides = strides
         self.num_features = len(self.strides)
         sizes = _broadcast_params(conf.sizes, self.num_features, "sizes")
         aspect_ratios = _broadcast_params(conf.aspect_ratios, self.num_features, "aspect_ratios")

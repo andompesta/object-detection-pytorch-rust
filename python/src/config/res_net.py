@@ -1,7 +1,7 @@
 from python.src.config import BaseConf
 from python.src.utils import ShapeSpec, LayerSpec
 
-from typing import List
+from typing import List, Tuple
 
 class ResNetStageConf(object):
     def __init__(
@@ -72,6 +72,7 @@ class ResNet18Conf(BaseConf):
                 )
             ],
             avgpool_size: int = 1,
+            out_features: List[str] = ["res1", "res2", "res3", "res4"],
             **kwargs
     ):
         super(ResNet18Conf, self).__init__(name=name)
@@ -81,6 +82,7 @@ class ResNet18Conf(BaseConf):
         self.stem_use_bias = stem_use_bias
 
         self.layers = layers
+        self.out_features = out_features
 
         self.avgpool_size = avgpool_size
         for n, v in kwargs.items():

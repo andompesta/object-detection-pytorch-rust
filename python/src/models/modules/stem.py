@@ -1,9 +1,10 @@
 from torch import nn, Tensor
 from torch.nn import functional as F
 from python.src.utils import ShapeSpec
+from python.src.models import InitModule
 
 
-class BasicStem(nn.Module):
+class BasicStem(InitModule):
     """
     The standard ResNet stem (layers before the first residual block).
     """
@@ -15,7 +16,7 @@ class BasicStem(nn.Module):
             use_bias: bool,
             norm: str
     ):
-        super().__init__()
+        super(BasicStem, self).__init__()
         self.conv_shape = conv_shape
         self.pool_shape = pool_shape
         self.conv = nn.Conv2d(
@@ -45,3 +46,16 @@ class BasicStem(nn.Module):
             padding=self.pool_shape.padding
         )
         return x
+
+    def _init_weights_(self, module: nn.Module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.)
+
+        elif isinstance(module, nn.BatchNorm2d):
+            nn.init.constant_(module.weight, 1.)
+            nn.init.constant_(module.bias, 0.)
+
+        else:
+            raise AttributeError(f"unexpected parameter found \n {module}")

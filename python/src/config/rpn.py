@@ -2,6 +2,7 @@ from typing import Union, List, Dict, Tuple
 import math
 from python.src.config import BaseConf
 from python.src.utils import ShapeSpec, RpnLossSpec
+from .matcher import MatcherConf
 
 # Value for clamping large dw and dh predictions. The heuristic is that we clamp
 # such that dw and dh are no larger than what would transform a 16px box into a
@@ -13,8 +14,7 @@ _DEFAULT_LOSS_WEIGHTS = RpnLossSpec(1., 1.)
 class AnchorGeneratorConf(object):
     def __init__(
             self,
-            strides: List[int] = (16),
-            sizes: Union[List[List[float]], List[float]] = [[32, 64, 128, 256, 512]],
+            sizes: Union[List[List[float]], List[float]] = [[32], [64], [128], [256], [512]],
             aspect_ratios: Union[List[List[float]], List[float]] = [[0.5, 1.0, 2.0]],
             offset: float = 0.0,
             box_dim: int = 4
@@ -26,17 +26,16 @@ class AnchorGeneratorConf(object):
             input image size changes.
         :param aspect_ratios: list of aspect ratios (i.e. height / width) to use for anchors. Same "broadcast" rule for
             `sizes` applies.
-        :param strides: stride of each input feature.
         :param offset: Relative offset between the center of the first anchor and the top-left corner of the image.
             Value has to be in [0, 1).
         """
         self.sizes = sizes
         self.aspect_ratios = aspect_ratios
-        self.strides = strides
         self.offset = offset
         self.box_dim = box_dim
 
-class AnchorMatcherConf(object):
+
+class AnchorMatcherConf(MatcherConf):
     def __init__(
             self,
             iou_thresholds: List[float] = [0.3, 0.7],
@@ -56,15 +55,16 @@ class AnchorMatcherConf(object):
                 labels = [0, -1, 1]
                 All predictions with iou < 0.3 will be marked with 0 and
                 thus will be considered as false positives while training.
-                All predictions with 0.3 <= iou < 0.5 will be marked with -1 and
+
                 thus will be ignored.
                 All predictions with 0.5 <= iou will be marked with 1 and
                 thus will be considered as true positives.
         """
-
-        self.iou_thresholds = iou_thresholds
-        self.iou_labels = iou_labels
-        self.allow_low_quality_matches = allow_low_quality_matches
+        super(AnchorMatcherConf, self).__init__(
+            thresholds=iou_thresholds,
+            labels=iou_labels,
+            allow_low_quality_matches=allow_low_quality_matches
+        )
 
 class Box2BoxTransformConf(object):
     def __init__(
@@ -78,13 +78,15 @@ class Box2BoxTransformConf(object):
 class RPNHeadConf(object):
     def __init__(
             self,
-            in_channels: int = 512,
-            num_anchors: int = 15,
+            in_channels: int = 64,
+            num_anchors: int = 3,
             box_dim: int = 4
     ):
+        self.in_channels = in_channels
+        self.num_anchors = num_anchors
         self.conv_shape = ShapeSpec(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1, dilation=1)
         self.anchor_deltas_shape = ShapeSpec(in_channels=in_channels, out_channels=num_anchors * box_dim, kernel_size=1, stride=1, padding=0, dilation=1)
-        self.objectness_logits_shape = ShapeSpec(in_channels=512, out_channels=num_anchors, kernel_size=1, stride=1, padding=0, dilation=1)
+        self.objectness_logits_shape = ShapeSpec(in_channels=in_channels, out_channels=num_anchors, kernel_size=1, stride=1, padding=0, dilation=1)
 
 
 class RegionProposalNetworkConf(BaseConf):
@@ -105,6 +107,7 @@ class RegionProposalNetworkConf(BaseConf):
             loss_weight: Union[float, RpnLossSpec] = _DEFAULT_LOSS_WEIGHTS,
             box_reg_loss_type: str = "smooth_l1",
             smooth_l1_beta: float = 0.0,
+            in_features: List[str] = ['p1', 'p2', 'p3', 'p4', 'p5'],
             **kwargs
     ):
         super(RegionProposalNetworkConf, self).__init__(name=name)
@@ -113,13 +116,13 @@ class RegionProposalNetworkConf(BaseConf):
         self.anchor_matcher = anchor_matcher
         self.box2box_transform = box2box_transform
 
-        assert self.head.objectness_logits_shape.out_channels == \
-               len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0]),\
-            f"object_logit head output size does not match {self.head.objectness_logits_shape.out_channels} {len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0])}"
-
-        assert self.head.anchor_deltas_shape.out_channels == \
-               len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0]) * self.anchor_generator.box_dim, \
-            f"anchor_deltas_shape head output size does not match {self.head.anchor_deltas_shape.out_channels} \t vs. \t {len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0]) * self.anchor_generator.box_dim}"
+        # assert self.head.objectness_logits_shape.out_channels == \
+        #        len(self.anchor_generator.sizes) * len(self.anchor_generator.aspect_ratios[0]),\
+        #     f"object_logit head output size does not match {self.head.objectness_logits_shape.out_channels} {len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0])}"
+        #
+        # assert self.head.anchor_deltas_shape.out_channels == \
+        #        len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0]) * self.anchor_generator.box_dim, \
+        #     f"anchor_deltas_shape head output size does not match {self.head.anchor_deltas_shape.out_channels} \t vs. \t {len(self.anchor_generator.sizes[0]) * len(self.anchor_generator.aspect_ratios[0]) * self.anchor_generator.box_dim}"
 
         self.batch_size_per_image = batch_size_per_image
         self.positive_fraction = positive_fraction
@@ -131,6 +134,7 @@ class RegionProposalNetworkConf(BaseConf):
         self.loss_weight = loss_weight
         self.box_reg_loss_type = box_reg_loss_type
         self.smooth_l1_beta = smooth_l1_beta
+        self.in_features = in_features
 
         for n, v in kwargs.items():
                 setattr(self, n, v)

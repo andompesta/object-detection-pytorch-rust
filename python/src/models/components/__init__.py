@@ -1,5 +1,5 @@
 from .box_regression import Box2BoxTransform, _dense_box_regression_loss
-from .anchor_matcher import Matcher
+from .matcher import Matcher
 
 
 __all__ = [

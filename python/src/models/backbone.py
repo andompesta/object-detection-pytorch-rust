@@ -1,6 +1,7 @@
-import torch
 from torch import nn
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
+from typing import Dict
+from python.src.utils import ShapeSpec
 
 class Backbone(nn.Module, metaclass=ABCMeta):
     def __init__(self):
@@ -8,6 +9,12 @@ class Backbone(nn.Module, metaclass=ABCMeta):
         The `__init__` method of any subclass can specify its own set of arguments.
         """
         super().__init__()
+        self._out_features = []
+        self._out_feature_strides = {}
+        self._out_feature_channels = {}
+
+
+
 
     @property
     def size_divisibility(self) -> int:
@@ -20,5 +27,5 @@ class Backbone(nn.Module, metaclass=ABCMeta):
         """
         return 0
 
-
-
+    def output_shapes(self) -> Dict[str, ShapeSpec]:
+        ...

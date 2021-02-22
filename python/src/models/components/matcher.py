@@ -2,7 +2,7 @@ from typing import Tuple
 import torch
 
 from python.src.utils import nonzero_tuple
-from python.src.config import AnchorMatcherConf
+from python.src.config import MatcherConf
 
 class Matcher(object):
     """
@@ -20,20 +20,20 @@ class Matcher(object):
 
     def __init__(
             self,
-            conf: AnchorMatcherConf
+            conf: MatcherConf
     ):
 
         # Add -inf and +inf to first and last position in thresholds
-        iou_thresholds = conf.iou_thresholds[:]
-        assert iou_thresholds[0] > 0
-        iou_thresholds.insert(0, -float("inf"))
-        iou_thresholds.append(float("inf"))
+        thresholds = conf.thresholds[:]
+        assert thresholds[0] > 0
+        thresholds.insert(0, -float("inf"))
+        thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
-        assert all([low <= high for (low, high) in zip(iou_thresholds[:-1], iou_thresholds[1:])])
-        assert all([l in [-1, 0, 1] for l in conf.iou_labels])
-        assert len(conf.iou_labels) == len(iou_thresholds) - 1
-        self.iou_thresholds = iou_thresholds
-        self.iou_labels = conf.iou_labels
+        assert all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])])
+        assert all([l in [-1, 0, 1] for l in conf.labels])
+        assert len(conf.labels) == len(thresholds) - 1
+        self.thresholds = thresholds
+        self.labels = conf.labels
         self.allow_low_quality_matches = conf.allow_low_quality_matches
 
     def __call__(
@@ -58,7 +58,7 @@ class Matcher(object):
             # to `self.labels[0]`, which usually defaults to background class 0
             # To choose to ignore instead, can make labels=[-1,0,-1,1] + set appropriate thresholds
             default_match_labels = match_quality_matrix.new_full(
-                (match_quality_matrix.size(1),), self.iou_labels[0], dtype=torch.int8
+                (match_quality_matrix.size(1),), self.labels[0], dtype=torch.int8
             )
             return default_matches, default_match_labels
 
@@ -70,7 +70,7 @@ class Matcher(object):
 
         match_labels = matches.new_full(matches.size(), 1, dtype=torch.int8)
 
-        for (l, low, high) in zip(self.iou_labels, self.iou_thresholds[:-1], self.iou_thresholds[1:]):
+        for (l, low, high) in zip(self.labels, self.thresholds[:-1], self.thresholds[1:]):
             low_high = (matched_vals >= low) & (matched_vals < high)
             match_labels[low_high] = l
 

@@ -143,7 +143,7 @@ class ResidualBlock18(ResidualBlock):
             ))
 
             if self.norm == "BN":
-                setattr(self, f"bn{idx+1}", nn.BatchNorm2d(conv_shape.out_channels))
+                self.add_module(f"bn{idx+1}", nn.BatchNorm2d(conv_shape.out_channels))
             else:
                 raise NotImplementedError()
 

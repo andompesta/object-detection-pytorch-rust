@@ -8,7 +8,7 @@ from .modules import AnchorGenerator, RPNHead
 from .components import Matcher, Box2BoxTransform, _dense_box_regression_loss
 from python.src.config import RegionProposalNetworkConf, RPNHeadConf, AnchorGeneratorConf
 from python.src.structures import Boxes, Instances, ImageList, pairwise_iou, Logs
-from python.src.utils import nonzero_tuple, cat, batched_nms
+from python.src.utils import nonzero_tuple, cat, batched_nms, is_tracing, ShapeSpec
 from python.src.memory import retry_if_cuda_oom
 
 def subsample_labels(
@@ -54,13 +54,6 @@ def subsample_labels(
     pos_idx = positive[perm1]
     neg_idx = negative[perm2]
     return pos_idx, neg_idx
-
-
-def _is_tracing():
-    if torch.jit.is_scripting():
-        return False
-    else:
-        return torch.__version__[:3] >= '1.7' and torch.jit.is_tracing()
 
 def find_top_rpn_proposals(
     proposals: List[torch.Tensor],
@@ -145,7 +138,7 @@ def find_top_rpn_proposals(
 
         # filter empty boxes
         keep = boxes.nonempty(threshold=min_box_size)
-        if _is_tracing() or keep.sum().item() != len(boxes):
+        if is_tracing() or keep.sum().item() != len(boxes):
             boxes, scores_per_img, lvl = boxes[keep], scores_per_img[keep], lvl[keep]
 
         keep = batched_nms(boxes.tensor, scores_per_img, lvl, nms_thresh)
@@ -169,21 +162,31 @@ class RegionProposalNetwork(InitModule):
     def __init__(
             self,
             conf: RegionProposalNetworkConf,
-            in_features: List[str]
+            input_shapes: Dict[str, ShapeSpec]
     ):
         super(RegionProposalNetwork, self).__init__()
 
+        self.in_features = conf.in_features
+        input_strides = [input_shapes[f].stride for f in self.in_features]
+        in_channels = [input_shapes[f].out_channels for f in self.in_features]
+
+        assert len(set(in_channels)) == 1, "Each level must have the same channel!"
+        in_channels = in_channels[0]
+
+        # get anchor generator
+        if isinstance(conf.anchor_generator, AnchorGeneratorConf):
+            self.anchor_generator = AnchorGenerator(conf.anchor_generator, input_strides)
+        else:
+            raise NotImplementedError(f"anchor generator type {type(conf.anchor_generator)} not implemented yet")
+
         # get head
         if isinstance(conf.head, RPNHeadConf):
+            assert conf.head.in_channels == in_channels, f"RPNhead input channel does not match \t {conf.head.in_channels} vs \t {in_channels}"
+            assert conf.head.num_anchors == self.anchor_generator.num_anchors[0], f"RPNhead num_anchors does not match \t {conf.head.num_anchors} vs \t {self.anchor_generator.num_anchors[0]}"
             self.head = RPNHead(conf.head)
         else:
             raise NotImplementedError(f"head type {type(conf.head)} not implemented yet")
 
-        # get anchor generator
-        if isinstance(conf.anchor_generator, AnchorGeneratorConf):
-            self.anchor_generator = AnchorGenerator(conf.anchor_generator)
-        else:
-            raise NotImplementedError(f"anchor generator type {type(conf.anchor_generator)} not implemented yet")
 
         self.anchor_matcher = Matcher(conf.anchor_matcher)
         self.box2box_transform = Box2BoxTransform(conf.box2box_transform)
@@ -198,7 +201,6 @@ class RegionProposalNetwork(InitModule):
         self.loss_weight = conf.loss_weight
         self.box_reg_loss_type = conf.box_reg_loss_type
         self.smooth_l1_beta = conf.smooth_l1_beta
-        self.in_features = in_features
 
         self.anchor_boundary_thresh = conf.anchor_boundary_thresh
 
