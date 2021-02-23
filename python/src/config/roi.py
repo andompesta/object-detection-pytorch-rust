@@ -23,9 +23,9 @@ class ROIPoolerConf(object):
 class ProposalMatcherConf(MatcherConf):
     def __init__(
             self,
-            roi_thresholds = [0.5],
-            roi_labels = [0, 1],
-            allow_low_quality_matches = False
+            roi_thresholds=[0.5],
+            roi_labels=[0, 1],
+            allow_low_quality_matches=False
     ):
         super(ProposalMatcherConf, self).__init__(
             thresholds=roi_thresholds,
@@ -34,11 +34,11 @@ class ProposalMatcherConf(MatcherConf):
         )
 
 
-class ROIBoxHead(object):
-    def __init__(
-            self,
-            layers = ShapeSpec()
-    ):
+# class ROIBoxHead(object):
+#     def __init__(
+#             self,
+#             layers = ShapeSpec()
+#     ):
 
 class ROIConf(object):
     def __init__(

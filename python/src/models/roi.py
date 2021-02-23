@@ -1,4 +1,14 @@
 import torch
+from torch import nn, Tensor
+from typing import Tuple, List, Optional, Dict
+import numpy as np
+
+from .utils import add_ground_truth_to_proposals
+from python.src.utils import subsample_labels
+from python.src.structures import Instances, pairwise_iou, Logs, ImageList
+from python.src.models.components import Matcher
+
+
 
 
 class ROIHeads(torch.nn.Module):
@@ -17,18 +27,17 @@ class ROIHeads(torch.nn.Module):
     """
 
     def __init__(
-        self,
-        num_classes,
-        batch_size_per_image,
-        positive_fraction,
-        proposal_matcher,
-        proposal_append_gt=True
+            self,
+            num_classes: int,
+            batch_size_per_image: int,
+            positive_fraction: float,
+            proposal_matcher: Matcher,
+            proposal_append_gt: bool = True
     ):
         """
         NOTE: this interface is experimental.
-
         Args:
-            num_classes (int): number of classes. Used to label background proposals.
+            num_classes (int): number of foreground classes (i.e. background is not included)
             batch_size_per_image (int): number of proposals to sample for training
             positive_fraction (float): fraction of positive (foreground) proposals
                 to sample for training.
@@ -42,26 +51,36 @@ class ROIHeads(torch.nn.Module):
         self.proposal_matcher = proposal_matcher
         self.proposal_append_gt = proposal_append_gt
 
+    @classmethod
+    def build(
+            cls,
+            conf
+    ):
+        return ROIHeads(
+            num_classes=conf.num_classes,
+            batch_size_per_image=conf.batch_size_per_image,
+            positive_fraction=conf.positive_fraction,
+            proposal_matcher=conf.proposal_matcher,
+            proposal_append_gt=conf.proposal_append_gt
+        )
 
     def _sample_proposals(
-        self, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+            self,
+            matched_idxs: Tensor,
+            matched_labels: Tensor,
+            gt_classes: Tensor
+    ) -> Tuple[Tensor, Tensor]:
         """
-        Based on the matching between N proposals and M groundtruth,
-        sample the proposals and set their classification labels.
+        Based on the matching between N proposals and M ground-truth, sample the proposals and set their classification
+            labels.
 
-        Args:
-            matched_idxs (Tensor): a vector of length N, each is the best-matched
-                gt index in [0, M) for each proposal.
-            matched_labels (Tensor): a vector of length N, the matcher's label
-                (one of cfg.MODEL.ROI_HEADS.IOU_LABELS) for each proposal.
-            gt_classes (Tensor): a vector of length M.
-
-        Returns:
-            Tensor: a vector of indices of sampled proposals. Each is in [0, N).
-            Tensor: a vector of the same length, the classification label for
-                each sampled proposal. Each sample is labeled as either a category in
-                [0, num_classes) or the background (num_classes).
+        :param matched_idxs: a vector of length N, each is the best-matched ground-true index in [0, M) for each proposal.
+        :param matched_labels: a vector of length N, the matcher's label (one of iou_labels) for each proposal.
+        :param gt_classes: a vector of length M.
+        :return:
+            -  a vector of indices of sampled proposals. Each is in [0, N).
+            - a vector of the same length, the classification label for each sampled proposal. Each sample is labeled as
+            either a category in [0, num_classes) or the background (num_classes).
         """
         has_gt = gt_classes.numel() > 0
         # Get the corresponding GT for each proposal
@@ -75,7 +94,10 @@ class ROIHeads(torch.nn.Module):
             gt_classes = torch.zeros_like(matched_idxs) + self.num_classes
 
         sampled_fg_idxs, sampled_bg_idxs = subsample_labels(
-            gt_classes, self.batch_size_per_image, self.positive_fraction, self.num_classes
+            labels=gt_classes,
+            num_samples=self.batch_size_per_image,
+            positive_fraction=self.positive_fraction,
+            bg_label=self.num_classes
         )
 
         sampled_idxs = torch.cat([sampled_fg_idxs, sampled_bg_idxs], dim=0)
@@ -83,31 +105,33 @@ class ROIHeads(torch.nn.Module):
 
     @torch.no_grad()
     def label_and_sample_proposals(
-        self, proposals: List[Instances], targets: List[Instances]
+            self,
+            proposals: List[Instances],
+            targets: Optional[List[Instances]]
     ) -> List[Instances]:
         """
-        Prepare some proposals to be used to train the ROI heads.
-        It performs box matching between `proposals` and `targets`, and assigns
-        training labels to the proposals.
-        It returns ``self.batch_size_per_image`` random samples from proposals and groundtruth
-        boxes, with a fraction of positives that is no larger than
+        Prepare some proposals to be used to train the ROI heads. It performs box matching between `proposals` and
+        `targets`, and assigns training labels to the proposals. It returns ``self.batch_size_per_image`` random samples
+        from proposals and ground-truth boxes, with a fraction of positives that is no larger than
         ``self.positive_fraction``.
 
-        Args:
-            See :meth:`ROIHeads.forward`
-
-        Returns:
-            list[Instances]:
-                length `N` list of `Instances`s containing the proposals
-                sampled for training. Each `Instances` has the following fields:
-
+        :param proposals:  length `N` list of `Instances`. The i-th `Instances` contains object proposals for the i-th
+            input image, with fields "proposal_boxes" and "objectness_logits".
+        :param targets: length `N` list of `Instances`. The i-th `Instances` contains the ground-truth per-instance
+            annotations for the i-th input image.  Specify `targets` during training only.
+            It may have the following fields:
+                - gt_boxes: the bounding box of each instance.
+                - gt_classes: the label for each instance with a category ranging in [0, #class].
+                - gt_masks: PolygonMasks or BitMasks, the ground-truth masks of each instance.
+                - gt_keypoints: NxKx3, the groud-truth keypoints for each instance.
+        :return: length `N` list of `Instances`s containing the proposals sampled for training. Each `Instances` has the
+            following fields:
                 - proposal_boxes: the proposal boxes
-                - gt_boxes: the ground-truth box that the proposal is assigned to
-                  (this is only meaningful if the proposal has a label > 0; if label = 0
-                  then the ground-truth box is random)
+                - gt_boxes: the ground-truth box that the proposal is assigned to (this is only meaningful if the
+                proposal has a label > 0; if label = 0 then the ground-truth box is random)
 
-                Other fields such as "gt_classes", "gt_masks", that's included in `targets`.
         """
+
         gt_boxes = [x.gt_boxes for x in targets]
         # Augment proposals with ground-truth boxes.
         # In the case of learned proposals (e.g., RPN), when training starts
@@ -141,10 +165,10 @@ class ROIHeads(torch.nn.Module):
             proposals_per_image = proposals_per_image[sampled_idxs]
             proposals_per_image.gt_classes = gt_classes
 
-            # We index all the attributes of targets that start with "gt_"
-            # and have not been added to proposals yet (="gt_classes").
             if has_gt:
                 sampled_targets = matched_idxs[sampled_idxs]
+                # We index all the attributes of targets that start with "gt_"
+                # and have not been added to proposals yet (="gt_classes").
                 # NOTE: here the indexing waste some compute, because heads
                 # like masks, keypoints, etc, will filter the proposals again,
                 # (by foreground/background, or number of keypoints in the image, etc)
@@ -152,55 +176,116 @@ class ROIHeads(torch.nn.Module):
                 for (trg_name, trg_value) in targets_per_image.get_fields().items():
                     if trg_name.startswith("gt_") and not proposals_per_image.has(trg_name):
                         proposals_per_image.set(trg_name, trg_value[sampled_targets])
-            else:
-                gt_boxes = Boxes(
-                    targets_per_image.gt_boxes.tensor.new_zeros((len(sampled_idxs), 4))
-                )
-                proposals_per_image.gt_boxes = gt_boxes
+            # If no GT is given in the image, we don't know what a dummy gt value can be.
+            # Therefore the returned proposals won't have any gt_* fields, except for a
+            # gt_classes full of background label.
 
             num_bg_samples.append((gt_classes == self.num_classes).sum().item())
             num_fg_samples.append(gt_classes.numel() - num_bg_samples[-1])
             proposals_with_gt.append(proposals_per_image)
 
         # Log the number of fg/bg samples that are selected for training ROI heads
-        storage = get_event_storage()
+        storage = Logs.get_instance()
         storage.put_scalar("roi_head/num_fg_samples", np.mean(num_fg_samples))
         storage.put_scalar("roi_head/num_bg_samples", np.mean(num_bg_samples))
 
         return proposals_with_gt
 
     def forward(
-        self,
-        images: ImageList,
-        features: Dict[str, torch.Tensor],
-        proposals: List[Instances],
-        targets: Optional[List[Instances]] = None,
+            self,
+            images: ImageList,
+            features: Dict[str, torch.Tensor],
+            proposals: List[Instances],
+            targets: Optional[List[Instances]] = None,
     ) -> Tuple[List[Instances], Dict[str, torch.Tensor]]:
         """
-        Args:
-            images (ImageList):
-            features (dict[str,Tensor]): input data as a mapping from feature
-                map name to tensor. Axis 0 represents the number of images `N` in
-                the input data; axes 1-3 are channels, height, and width, which may
-                vary between feature maps (e.g., if a feature pyramid is used).
-            proposals (list[Instances]): length `N` list of `Instances`. The i-th
-                `Instances` contains object proposals for the i-th input image,
-                with fields "proposal_boxes" and "objectness_logits".
-            targets (list[Instances], optional): length `N` list of `Instances`. The i-th
-                `Instances` contains the ground-truth per-instance annotations
-                for the i-th input image.  Specify `targets` during training only.
-                It may have the following fields:
 
+        :param images:
+        :param features: input data as a mapping from feature map name to tensor. Axis 0 represents the number of images
+            `N` in the input data; axes 1-3 are channels, height, and width, which may vary between feature maps (e.g.,
+            if a feature pyramid is used).
+        :param proposals: length `N` list of `Instances`. The i-th `Instances` contains object proposals for the i-th
+            input image, with fields "proposal_boxes" and "objectness_logits".
+        :param targets: length `N` list of `Instances`. The i-th `Instances` contains the ground-truth per-instance
+            annotations for the i-th input image.  Specify `targets` during training only.
+            It may have the following fields:
                 - gt_boxes: the bounding box of each instance.
                 - gt_classes: the label for each instance with a category ranging in [0, #class].
                 - gt_masks: PolygonMasks or BitMasks, the ground-truth masks of each instance.
                 - gt_keypoints: NxKx3, the groud-truth keypoints for each instance.
-
-        Returns:
-            list[Instances]: length `N` list of `Instances` containing the
-            detected instances. Returned during inference only; may be [] during training.
-
-            dict[str->Tensor]:
-            mapping from a named loss to a tensor storing the loss. Used during training only.
+        :return:
+            - length `N` list of `Instances` containing the detected instances. Returned during inference only; may be
+            [] during training.
+            - mapping from a named loss to a tensor storing the loss. Used during training only.
         """
         raise NotImplementedError()
+
+
+
+class StandardROIHeads(ROIHeads):
+    """
+    It's "standard" in a sense that there is no ROI transform sharing
+    or feature sharing between tasks.
+    Each head independently processes the input features by each head's
+    own pooler and head.
+
+    This class is used by most models, such as FPN and C5.
+    To implement more models, you can subclass it and implement a different
+    :meth:`forward()` or a head.
+    """
+
+    def __init__(
+        self,
+        box_in_features: List[str],
+        box_pooler: ROIPooler,
+        box_head: nn.Module,
+        box_predictor: nn.Module,
+        mask_in_features: Optional[List[str]] = None,
+        mask_pooler: Optional[ROIPooler] = None,
+        mask_head: Optional[nn.Module] = None,
+        keypoint_in_features: Optional[List[str]] = None,
+        keypoint_pooler: Optional[ROIPooler] = None,
+        keypoint_head: Optional[nn.Module] = None,
+        train_on_pred_boxes: bool = False,
+        **kwargs
+    ):
+        """
+        NOTE: this interface is experimental.
+
+        Args:
+            box_in_features (list[str]): list of feature names to use for the box head.
+            box_pooler (ROIPooler): pooler to extra region features for box head
+            box_head (nn.Module): transform features to make box predictions
+            box_predictor (nn.Module): make box predictions from the feature.
+                Should have the same interface as :class:`FastRCNNOutputLayers`.
+            mask_in_features (list[str]): list of feature names to use for the mask
+                pooler or mask head. None if not using mask head.
+            mask_pooler (ROIPooler): pooler to extract region features from image features.
+                The mask head will then take region features to make predictions.
+                If None, the mask head will directly take the dict of image features
+                defined by `mask_in_features`
+            mask_head (nn.Module): transform features to make mask predictions
+            keypoint_in_features, keypoint_pooler, keypoint_head: similar to ``mask_*``.
+            train_on_pred_boxes (bool): whether to use proposal boxes or
+                predicted boxes from the box head to train other heads.
+        """
+        super().__init__(**kwargs)
+        # keep self.in_features for backward compatibility
+        self.in_features = self.box_in_features = box_in_features
+        self.box_pooler = box_pooler
+        self.box_head = box_head
+        self.box_predictor = box_predictor
+
+        self.mask_on = mask_in_features is not None
+        if self.mask_on:
+            self.mask_in_features = mask_in_features
+            self.mask_pooler = mask_pooler
+            self.mask_head = mask_head
+
+        self.keypoint_on = keypoint_in_features is not None
+        if self.keypoint_on:
+            self.keypoint_in_features = keypoint_in_features
+            self.keypoint_pooler = keypoint_pooler
+            self.keypoint_head = keypoint_head
+
+        self.train_on_pred_boxes = train_on_pred_boxes
