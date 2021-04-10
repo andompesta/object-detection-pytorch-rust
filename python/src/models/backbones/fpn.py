@@ -4,13 +4,13 @@ from typing import Dict
 from collections import OrderedDict
 
 from .backbone import Backbone
-from .base import InitModule
+from python.src.models.base import InitModule, BuildModule
 from .res_net import ResNet18
 from python.src.config import FPN18Conf, ResNet18Conf
 from python.src.models.modules import LastLevelMaxPool, FPNTopDownBlock
 from python.src.utils import ShapeSpec
 
-class FPN(InitModule, Backbone):
+class FPN(InitModule, BuildModule, Backbone):
     def __init__(
             self,
             conf: FPN18Conf
@@ -18,7 +18,9 @@ class FPN(InitModule, Backbone):
         super(FPN, self).__init__()
 
         if isinstance(conf.bottom_up_conf, ResNet18Conf):
-            self.bottom_up = ResNet18(conf.bottom_up_conf)
+            self.bottom_up = ResNet18.build(
+                conf.bottom_up_conf
+            )
         else:
             raise NotImplementedError()
 
@@ -31,8 +33,11 @@ class FPN(InitModule, Backbone):
         strides = [input_shapes[f].stride for f in self.in_features]
         in_channels_per_feature = [input_shapes[f].out_channels for f in self.in_features]
 
+        # TODO: check if topdown order need to be reversed
         for idx, (layer_cfg, in_channels) in enumerate(zip(conf.layers, in_channels_per_feature)):
-            assert layer_cfg.lateral_shape.in_channels == in_channels, f"Missmatch bottom_up shape {in_channels} \t vs \t topdown shape {layer_cfg.lateral_shape.in_channels}"
+            assert layer_cfg.lateral_shape.in_channels == in_channels, \
+                f"Miss-match bottom_up shape {in_channels} \t vs \t topdown shape {layer_cfg.lateral_shape.in_channels}"
+
             name = f"fpn{idx + 1}"
             self.add_module(name, FPNTopDownBlock.build(layer_cfg))
             layers_name.append(name)
@@ -94,3 +99,10 @@ class FPN(InitModule, Backbone):
             module.init_weights()
         else:
             print(f"--> forward init for module {module}")
+
+    @classmethod
+    def build(
+            cls,
+            conf: FPN18Conf
+    ):
+        return cls(conf)

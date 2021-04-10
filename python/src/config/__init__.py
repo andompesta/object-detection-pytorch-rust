@@ -3,7 +3,7 @@ from .matcher import MatcherConf
 from .res_net import ResNet18Conf, ResNetStageConf
 from .fpn import FPN18Conf, LastLevelMaxPoolConf, FPNStageConf
 from .rpn import AnchorGeneratorConf, AnchorMatcherConf, Box2BoxTransformConf, RPNHeadConf, RegionProposalNetworkConf
-from .roi import ROIPoolerConf
+from .roi import ROIPoolerConf, ROIAlignConf, ROIConf
 
 __all__ = [
     "BaseConf",
@@ -17,5 +17,7 @@ __all__ = [
     "FPNStageConf",
     "LastLevelMaxPoolConf",
     "MatcherConf",
-    "ROIPoolerConf"
+    "ROIPoolerConf",
+    "ROIAlignConf",
+    "ROIConf"
 ]

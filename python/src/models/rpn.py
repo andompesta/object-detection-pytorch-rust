@@ -1,31 +1,42 @@
 import torch
 from torch import nn
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Union
 from einops import rearrange
 
 from .base import InitModule
 from .modules import AnchorGenerator, RPNHead
 from .components import Matcher, Box2BoxTransform, _dense_box_regression_loss
 from .utils import find_top_rpn_proposals
-from python.src.config import RegionProposalNetworkConf, RPNHeadConf, AnchorGeneratorConf
+from python.src.config import RegionProposalNetworkConf, RPNHeadConf, AnchorGeneratorConf, AnchorMatcherConf, \
+    Box2BoxTransformConf
 from python.src.structures import Boxes, Instances, ImageList, pairwise_iou, Logs
-from python.src.utils import subsample_labels, cat, ShapeSpec
+from python.src.utils import subsample_labels, cat, ShapeSpec,RpnLossSpec
 from python.src.memory import retry_if_cuda_oom
-
-
-
-
 
 
 class RegionProposalNetwork(InitModule):
     def __init__(
             self,
-            conf: RegionProposalNetworkConf,
-            input_shapes: Dict[str, ShapeSpec]
+            input_shapes: Dict[str, ShapeSpec],
+            in_features: List[str],
+            head: RPNHeadConf,
+            anchor_generator: AnchorGeneratorConf,
+            anchor_matcher: AnchorMatcherConf,
+            box2box_transform: Box2BoxTransformConf,
+            batch_size_per_image: int,
+            positive_fraction: float,
+            pre_nms_topk: Tuple[float, float],
+            post_nms_topk: Tuple[float, float],
+            nms_thresh: float,
+            min_box_size: float,
+            anchor_boundary_thresh: float,
+            loss_weight: Union[float, RpnLossSpec],
+            box_reg_loss_type: str,
+            smooth_l1_beta: float,
     ):
         super(RegionProposalNetwork, self).__init__()
 
-        self.in_features = conf.in_features
+        self.in_features = in_features
         input_strides = [input_shapes[f].stride for f in self.in_features]
         in_channels = [input_shapes[f].out_channels for f in self.in_features]
 
@@ -33,35 +44,64 @@ class RegionProposalNetwork(InitModule):
         in_channels = in_channels[0]
 
         # get anchor generator
-        if isinstance(conf.anchor_generator, AnchorGeneratorConf):
-            self.anchor_generator = AnchorGenerator(conf.anchor_generator, input_strides)
+        if isinstance(anchor_generator, AnchorGeneratorConf):
+            self.anchor_generator = AnchorGenerator.build(
+                conf=anchor_generator,
+                strides=input_strides
+            )
         else:
-            raise NotImplementedError(f"anchor generator type {type(conf.anchor_generator)} not implemented yet")
+            raise NotImplementedError(f"anchor generator type {type(anchor_generator)} not implemented yet")
 
         # get head
-        if isinstance(conf.head, RPNHeadConf):
-            assert conf.head.in_channels == in_channels, f"RPNhead input channel does not match \t {conf.head.in_channels} vs \t {in_channels}"
-            assert conf.head.num_anchors == self.anchor_generator.num_anchors[0], f"RPNhead num_anchors does not match \t {conf.head.num_anchors} vs \t {self.anchor_generator.num_anchors[0]}"
-            self.head = RPNHead(conf.head)
+        if isinstance(head, RPNHeadConf):
+            assert head.in_channels == in_channels, \
+                f"RPNhead input channel does not match \t {head.in_channels} vs \t {in_channels}"
+            assert head.num_anchors == self.anchor_generator.num_anchors[0], \
+                f"RPNhead num_anchors does not match \t {head.num_anchors} vs \t {self.anchor_generator.num_anchors[0]}"
+            self.head = RPNHead.build(head)
         else:
-            raise NotImplementedError(f"head type {type(conf.head)} not implemented yet")
+            raise NotImplementedError(f"head type {type(head)} not implemented yet")
 
+        self.anchor_matcher = Matcher.build(anchor_matcher)
+        self.box2box_transform = Box2BoxTransform.build(box2box_transform)
 
-        self.anchor_matcher = Matcher(conf.anchor_matcher)
-        self.box2box_transform = Box2BoxTransform(conf.box2box_transform)
-
-        self.batch_size_per_image = conf.batch_size_per_image
-        self.positive_fraction = conf.positive_fraction
+        self.batch_size_per_image = batch_size_per_image
+        self.positive_fraction = positive_fraction
         # Map from self.training state to train/test settings
-        self.pre_nms_topk = conf.pre_nms_topk
-        self.post_nms_topk = conf.post_nms_topk
-        self.nms_thresh = conf.nms_thresh
-        self.min_box_size = float(conf.min_box_size)
-        self.loss_weight = conf.loss_weight
-        self.box_reg_loss_type = conf.box_reg_loss_type
-        self.smooth_l1_beta = conf.smooth_l1_beta
+        self.pre_nms_topk = pre_nms_topk
+        self.post_nms_topk = post_nms_topk
+        self.nms_thresh = nms_thresh
+        self.min_box_size = float(min_box_size)
+        self.loss_weight = loss_weight
+        self.box_reg_loss_type = box_reg_loss_type
+        self.smooth_l1_beta = smooth_l1_beta
+        self.anchor_boundary_thresh = anchor_boundary_thresh
 
-        self.anchor_boundary_thresh = conf.anchor_boundary_thresh
+
+    @classmethod
+    def build(
+            cls,
+            conf: RegionProposalNetworkConf,
+            input_shapes: Dict[str, ShapeSpec]
+    ):
+        return RegionProposalNetwork(
+            input_shapes=input_shapes,
+            in_features=conf.in_features,
+            head=conf.head,
+            anchor_generator=conf.anchor_generator,
+            anchor_matcher=conf.anchor_matcher,
+            box2box_transform=conf.box2box_transform,
+            batch_size_per_image=conf.batch_size_per_image,
+            positive_fraction=conf.positive_fraction,
+            pre_nms_topk=conf.pre_nms_topk,
+            post_nms_topk=conf.post_nms_topk,
+            nms_thresh=conf.nms_thresh,
+            min_box_size=conf.min_box_size,
+            anchor_boundary_thresh=conf.anchor_boundary_thresh,
+            loss_weight=conf.loss_weight,
+            box_reg_loss_type=conf.box_reg_loss_type,
+            smooth_l1_beta=conf.smooth_l1_beta,
+        )
 
 
 

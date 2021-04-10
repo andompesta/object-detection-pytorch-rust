@@ -4,8 +4,9 @@ from torch.nn import functional as F
 
 from python.src.config import LastLevelMaxPoolConf
 from python.src.config import FPNStageConf
-from python.src.models import InitModule
+from python.src.models import InitModule, BuildModule
 from python.src.utils import ShapeSpec
+from .wrappers import Conv2d, get_norm
 
 class LastLevelMaxPool(nn.Module):
     """
@@ -35,7 +36,7 @@ class LastLevelMaxPool(nn.Module):
             padding=self.padding
         )
 
-class FPNTopDownBlock(InitModule):
+class FPNTopDownBlock(InitModule, BuildModule):
     def __init__(
             self,
             lateral_shape: ShapeSpec,
@@ -44,28 +45,28 @@ class FPNTopDownBlock(InitModule):
             norm: str
     ):
         super(FPNTopDownBlock, self).__init__()
+        lateral_norm = get_norm(norm, lateral_shape.out_channels)
+        output_norm = get_norm(norm, lateral_shape.out_channels)
 
-        self.lateral = nn.Conv2d(
-            lateral_shape.in_channels,
-            lateral_shape.out_channels,
+        self.lateral = Conv2d(
+            in_channels=lateral_shape.in_channels,
+            out_channels=lateral_shape.out_channels,
             kernel_size=lateral_shape.kernel_size,
             stride=lateral_shape.stride,
             padding=lateral_shape.padding,
             bias=use_bias,
+            norm=lateral_norm,
         )
-        if not use_bias and norm != "":
-            self.add_module(f"lateral_bn", nn.BatchNorm2d(lateral_shape.out_channels))
 
-        self.output = nn.Conv2d(
+        self.output = Conv2d(
             output_shape.in_channels,
             output_shape.out_channels,
             kernel_size=output_shape.kernel_size,
             stride=output_shape.stride,
             padding=output_shape.padding,
             bias=use_bias,
+            norm=output_norm
         )
-        if not use_bias and norm != "":
-            self.add_module(f"output_bn", nn.BatchNorm2d(lateral_shape.out_channels))
 
         self.use_bias = use_bias
         self.scale_factor = 2

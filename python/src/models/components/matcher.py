@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 import torch
 
 from python.src.utils import nonzero_tuple
@@ -20,21 +20,35 @@ class Matcher(object):
 
     def __init__(
             self,
-            conf: MatcherConf
+            thresholds: List[float],
+            labels: List[int],
+            allow_low_quality_matches: bool = True
     ):
 
         # Add -inf and +inf to first and last position in thresholds
-        thresholds = conf.thresholds[:]
+        thresholds = thresholds[:]
         assert thresholds[0] > 0
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
         assert all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])])
-        assert all([l in [-1, 0, 1] for l in conf.labels])
-        assert len(conf.labels) == len(thresholds) - 1
+        assert all([l in [-1, 0, 1] for l in labels])
+        assert len(labels) == len(thresholds) - 1
         self.thresholds = thresholds
-        self.labels = conf.labels
-        self.allow_low_quality_matches = conf.allow_low_quality_matches
+        self.labels = labels
+        self.allow_low_quality_matches = allow_low_quality_matches
+
+    @classmethod
+    def build(
+            cls,
+            conf: MatcherConf
+    ):
+        return Matcher(
+            thresholds=conf.thresholds,
+            labels=conf.labels,
+            allow_low_quality_matches=conf.allow_low_quality_matches
+        )
+
 
     def __call__(
             self,

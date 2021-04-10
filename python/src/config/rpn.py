@@ -84,9 +84,30 @@ class RPNHeadConf(object):
     ):
         self.in_channels = in_channels
         self.num_anchors = num_anchors
-        self.conv_shape = ShapeSpec(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1, dilation=1)
-        self.anchor_deltas_shape = ShapeSpec(in_channels=in_channels, out_channels=num_anchors * box_dim, kernel_size=1, stride=1, padding=0, dilation=1)
-        self.objectness_logits_shape = ShapeSpec(in_channels=in_channels, out_channels=num_anchors, kernel_size=1, stride=1, padding=0, dilation=1)
+        self.conv_shape = ShapeSpec(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            dilation=1
+        )
+        self.anchor_deltas_shape = ShapeSpec(
+            in_channels=in_channels,
+            out_channels=num_anchors * box_dim,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            dilation=1
+        )
+        self.objectness_logits_shape = ShapeSpec(
+            in_channels=in_channels,
+            out_channels=num_anchors,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            dilation=1
+        )
 
 
 class RegionProposalNetworkConf(BaseConf):

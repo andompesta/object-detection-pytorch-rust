@@ -8,6 +8,17 @@ from python.src.config import BaseConf
 from python.src.utils import ensure_dir
 
 
+class BuildModule(torch.nn.Module, metaclass=ABCMeta):
+    def __init__(self):
+        super(BuildModule, self).__init__()
+
+    @classmethod
+    def build(
+            cls,
+            conf: BaseConf,
+    ):
+        ...
+
 class InitModule(torch.nn.Module, metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         super(InitModule, self).__init__()
@@ -22,7 +33,7 @@ class InitModule(torch.nn.Module, metaclass=ABCMeta):
         ...
 
 
-class BaseModel(InitModule):
+class BaseModel(InitModule, BuildModule):
     def __init__(
             self,
             conf: BaseConf,
@@ -31,6 +42,7 @@ class BaseModel(InitModule):
         super(BaseModel, self).__init__()
         self.conf = conf
         self.name = conf.name
+
 
     def save(
             self,

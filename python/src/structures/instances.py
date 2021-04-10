@@ -119,7 +119,7 @@ class Instances:
             ret.set(k, v)
         return ret
 
-    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instances":
+    def __getitem__(self, item: Union[int, slice, torch.Tensor]) -> "Instances":
         """
         Args:
             item: an index-like object and will be used to index all the fields.

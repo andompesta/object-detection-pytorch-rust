@@ -1,7 +1,7 @@
 from python.src.config import BaseConf
 from python.src.utils import ShapeSpec
 
-from typing import List, Optional
+from typing import List
 from .res_net import ResNet18Conf
 
 

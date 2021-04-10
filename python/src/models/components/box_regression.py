@@ -23,10 +23,12 @@ class Box2BoxTransform(object):
 
     def __init__(
             self,
-            conf: Box2BoxTransformConf,
+            weights: Tuple[float, float, float, float],
+            scale_clamp: float
     ):
-        self.weights = conf.weights
-        self.scale_clamp = conf.scale_clamp
+        self.weights = weights
+        self.scale_clamp = scale_clamp
+
 
     def get_deltas(
             self,
@@ -111,6 +113,16 @@ class Box2BoxTransform(object):
         pred_boxes[:, 2::4] = pred_ctr_x + 0.5 * pred_w  # x2
         pred_boxes[:, 3::4] = pred_ctr_y + 0.5 * pred_h  # y2
         return pred_boxes
+
+    @classmethod
+    def build(
+            cls,
+            conf: Box2BoxTransformConf,
+    ):
+        return Box2BoxTransform(
+            conf.weights,
+            conf.scale_clamp
+        )
 
 
 def _dense_box_regression_loss(

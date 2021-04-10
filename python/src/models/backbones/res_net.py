@@ -5,9 +5,10 @@ from collections import OrderedDict
 from typing import Dict
 
 from python.src.config import ResNet18Conf
-from python.src.models import Backbone, BaseModel
+from python.src.models import BaseModel
 from python.src.models.modules import BasicStem, ResidualBlock18
 from python.src.utils import ShapeSpec
+from .backbone import Backbone
 
 class ResNet18(BaseModel, Backbone):
     def __init__(
@@ -92,6 +93,16 @@ class ResNet18(BaseModel, Backbone):
             ))
             for name in self._out_features
         ])
+
+    @classmethod
+    def build(
+            cls,
+            conf: ResNet18Conf
+    ):
+        return cls(
+            conf
+        )
+
         
 if __name__ == '__main__':
     conf = ResNet18Conf(num_classes=1000)

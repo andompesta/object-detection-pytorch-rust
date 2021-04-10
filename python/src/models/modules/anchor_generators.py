@@ -8,6 +8,7 @@ from einops import rearrange
 
 from python.src.config import AnchorGeneratorConf
 from python.src.structures import Boxes
+from python.src.models import BuildModule
 
 class BufferList(nn.Module):
     """
@@ -80,7 +81,7 @@ def _broadcast_params(
     return params
 
 
-class AnchorGenerator(nn.Module):
+class AnchorGenerator(BuildModule):
     box_dim: torch.jit.Final[int] = 4
     """
     the dimension of each anchor box.
@@ -88,8 +89,11 @@ class AnchorGenerator(nn.Module):
 
     def __init__(
             self,
-            conf: AnchorGeneratorConf,
-            strides: List[int]
+            strides: List[int],
+            sizes: Union[List[List[float]], List[float]],
+            aspect_ratios: Union[List[List[float]], List[float]],
+            offset: float,
+            box_dim: int
     ):
         """
         Compute anchors in the standard ways described in "Faster R-CNN: Towards Real-Time Object Detection with Region
@@ -103,14 +107,14 @@ class AnchorGenerator(nn.Module):
 
         self.strides = strides
         self.num_features = len(self.strides)
-        sizes = _broadcast_params(conf.sizes, self.num_features, "sizes")
-        aspect_ratios = _broadcast_params(conf.aspect_ratios, self.num_features, "aspect_ratios")
+        sizes = _broadcast_params(sizes, self.num_features, "sizes")
+        aspect_ratios = _broadcast_params(aspect_ratios, self.num_features, "aspect_ratios")
         self.cell_anchors = self._calculate_anchors(sizes, aspect_ratios)
 
-        self.offset = conf.offset
+        self.offset = offset
         assert 0.0 <= self.offset < 1.0, self.offset
-        assert conf.box_dim == AnchorGenerator.box_dim, \
-            f"configuration box dimension {conf.box_dim} \t vs \t class box dimension{AnchorGenerator.box_dim}"
+        assert box_dim == AnchorGenerator.box_dim, \
+            f"configuration box dimension {box_dim} \t vs \t class box dimension{AnchorGenerator.box_dim}"
 
     def _calculate_anchors(
             self,
@@ -190,12 +194,6 @@ class AnchorGenerator(nn.Module):
                 in XYXY format.
         """
 
-        # This is different from the anchor generator defined in the original Faster R-CNN
-        # code or Detectron. They yield the same AP, however the old version defines cell
-        # anchors in a less natural way with a shift relative to the feature grid and
-        # quantization that results in slightly different sizes for different aspect ratios.
-        # See also https://github.com/facebookresearch/Detectron/issues/227
-
         anchors = []
         for size in sizes:
             area = size ** 2.0
@@ -225,3 +223,17 @@ class AnchorGenerator(nn.Module):
         grid_sizes = [feature_map.shape[-2:] for feature_map in features]
         anchors_over_all_feature_maps = self._grid_anchors(grid_sizes)
         return [Boxes(x) for x in anchors_over_all_feature_maps]
+
+    @classmethod
+    def build(
+            cls,
+            conf: AnchorGeneratorConf,
+            strides: List[int]
+    ):
+        return AnchorGenerator(
+            strides=strides,
+            sizes=conf.sizes,
+            aspect_ratios=conf.aspect_ratios,
+            offset=conf.offset,
+            box_dim=conf.box_dim
+        )

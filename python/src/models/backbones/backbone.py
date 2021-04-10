@@ -13,9 +13,6 @@ class Backbone(nn.Module, metaclass=ABCMeta):
         self._out_feature_strides = {}
         self._out_feature_channels = {}
 
-
-
-
     @property
     def size_divisibility(self) -> int:
         """

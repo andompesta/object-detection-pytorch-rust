@@ -7,7 +7,8 @@ from .utils import add_ground_truth_to_proposals
 from python.src.utils import subsample_labels
 from python.src.structures import Instances, pairwise_iou, Logs, ImageList
 from python.src.models.components import Matcher
-
+from python.src.models.modules import ROIPooler
+from python.src.config import ROIConf
 
 
 
@@ -54,13 +55,13 @@ class ROIHeads(torch.nn.Module):
     @classmethod
     def build(
             cls,
-            conf
+            conf: ROIConf
     ):
         return ROIHeads(
             num_classes=conf.num_classes,
             batch_size_per_image=conf.batch_size_per_image,
             positive_fraction=conf.positive_fraction,
-            proposal_matcher=conf.proposal_matcher,
+            proposal_matcher=Matcher.build(conf.proposal_matcher),
             proposal_append_gt=conf.proposal_append_gt
         )
 
@@ -235,19 +236,23 @@ class StandardROIHeads(ROIHeads):
     """
 
     def __init__(
-        self,
-        box_in_features: List[str],
-        box_pooler: ROIPooler,
-        box_head: nn.Module,
-        box_predictor: nn.Module,
-        mask_in_features: Optional[List[str]] = None,
-        mask_pooler: Optional[ROIPooler] = None,
-        mask_head: Optional[nn.Module] = None,
-        keypoint_in_features: Optional[List[str]] = None,
-        keypoint_pooler: Optional[ROIPooler] = None,
-        keypoint_head: Optional[nn.Module] = None,
-        train_on_pred_boxes: bool = False,
-        **kwargs
+            self,
+            num_classes: int,
+            batch_size_per_image: int,
+            positive_fraction: float,
+            proposal_matcher: Matcher,
+            proposal_append_gt: bool,
+            box_in_features: List[str],
+            box_pooler: ROIPooler,
+            box_head: nn.Module,
+            box_predictor: nn.Module,
+            mask_in_features: Optional[List[str]] = None,
+            mask_pooler: Optional[ROIPooler] = None,
+            mask_head: Optional[nn.Module] = None,
+            keypoint_in_features: Optional[List[str]] = None,
+            keypoint_pooler: Optional[ROIPooler] = None,
+            keypoint_head: Optional[nn.Module] = None,
+            train_on_pred_boxes: bool = False,
     ):
         """
         NOTE: this interface is experimental.
@@ -269,7 +274,14 @@ class StandardROIHeads(ROIHeads):
             train_on_pred_boxes (bool): whether to use proposal boxes or
                 predicted boxes from the box head to train other heads.
         """
-        super().__init__(**kwargs)
+        super().__init__(
+            num_classes=num_classes,
+            batch_size_per_image=batch_size_per_image,
+            positive_fraction=positive_fraction,
+            proposal_matcher=proposal_matcher,
+            proposal_append_gt=proposal_append_gt
+        )
+
         # keep self.in_features for backward compatibility
         self.in_features = self.box_in_features = box_in_features
         self.box_pooler = box_pooler
@@ -289,3 +301,73 @@ class StandardROIHeads(ROIHeads):
             self.keypoint_head = keypoint_head
 
         self.train_on_pred_boxes = train_on_pred_boxes
+
+
+
+    @classmethod
+    def _init_mask_head(cls, cfg, input_shape):
+        if not cfg.MODEL.MASK_ON:
+            return {}
+        # fmt: off
+        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
+        pooler_resolution = cfg.MODEL.ROI_MASK_HEAD.POOLER_RESOLUTION
+        pooler_scales = tuple(1.0 / input_shape[k].stride for k in in_features)
+        sampling_ratio = cfg.MODEL.ROI_MASK_HEAD.POOLER_SAMPLING_RATIO
+        pooler_type = cfg.MODEL.ROI_MASK_HEAD.POOLER_TYPE
+        # fmt: on
+
+        in_channels = [input_shape[f].channels for f in in_features][0]
+
+        ret = {"mask_in_features": in_features}
+        ret["mask_pooler"] = (
+            ROIPooler(
+                output_size=pooler_resolution,
+                scales=pooler_scales,
+                sampling_ratio=sampling_ratio,
+                pooler_type=pooler_type,
+            )
+            if pooler_type
+            else None
+        )
+        if pooler_type:
+            shape = ShapeSpec(
+                channels=in_channels, width=pooler_resolution, height=pooler_resolution
+            )
+        else:
+            shape = {f: input_shape[f] for f in in_features}
+        ret["mask_head"] = build_mask_head(cfg, shape)
+        return ret
+
+    @classmethod
+    def _init_keypoint_head(cls, cfg, input_shape):
+        if not cfg.MODEL.KEYPOINT_ON:
+            return {}
+        # fmt: off
+        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
+        pooler_resolution = cfg.MODEL.ROI_KEYPOINT_HEAD.POOLER_RESOLUTION
+        pooler_scales = tuple(1.0 / input_shape[k].stride for k in in_features)  # noqa
+        sampling_ratio = cfg.MODEL.ROI_KEYPOINT_HEAD.POOLER_SAMPLING_RATIO
+        pooler_type = cfg.MODEL.ROI_KEYPOINT_HEAD.POOLER_TYPE
+        # fmt: on
+
+        in_channels = [input_shape[f].channels for f in in_features][0]
+
+        ret = {"keypoint_in_features": in_features}
+        ret["keypoint_pooler"] = (
+            ROIPooler(
+                output_size=pooler_resolution,
+                scales=pooler_scales,
+                sampling_ratio=sampling_ratio,
+                pooler_type=pooler_type,
+            )
+            if pooler_type
+            else None
+        )
+        if pooler_type:
+            shape = ShapeSpec(
+                channels=in_channels, width=pooler_resolution, height=pooler_resolution
+            )
+        else:
+            shape = {f: input_shape[f] for f in in_features}
+        ret["keypoint_head"] = build_keypoint_head(cfg, shape)
+        return ret

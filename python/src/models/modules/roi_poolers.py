@@ -3,21 +3,22 @@ import math
 from torch import nn
 from typing import List, Dict, Tuple, Union
 
+from python.src.models import InitModule, BuildModule
 from python.src.utils import nonzero_tuple, cat
 from python.src.structures import Boxes
-from python.src.config import ROIPoolerConf
+from python.src.config import ROIPoolerConf, ROIAlignConf
 
 from torchvision.ops import RoIPool
 from torchvision.ops import roi_align
 
 
-class ROIAlign(nn.Module):
+class ROIAlign(BuildModule):
     def __init__(
             self,
             output_size: Tuple[int, int],
             spatial_scale: float,
             sampling_ratio: int,
-            aligned: bool=True
+            aligned: bool = True
     ):
         """
 
@@ -48,13 +49,13 @@ class ROIAlign(nn.Module):
         self.sampling_ratio = sampling_ratio
         self.aligned = aligned
 
+
     def forward(
             self,
             input: torch.Tensor,
             rois: torch.Tensor
     ):
         """
-
         :param input: NCHW images
         :param rois: Bx5 boxes. First column is the index into N. The other 4 columns are xyxy.
         :return:
@@ -77,6 +78,26 @@ class ROIAlign(nn.Module):
         tmpstr += ", aligned=" + str(self.aligned)
         tmpstr += ")"
         return tmpstr
+
+    @classmethod
+    def build(
+            cls,
+            conf: ROIAlignConf
+    ):
+        from torchvision import __version__
+
+        version = tuple(int(x) for x in __version__.split(".")[:2])
+        # https://github.com/pytorch/vision/pull/2438
+        assert version >= (0, 7), "Require torchvision >= 0.7"
+
+        return ROIAlign(
+            conf.output_size,
+            conf.spatial_scale,
+            conf.sampling_ration,
+            conf.aligned
+        )
+
+
 
 
 def assign_boxes_to_levels(
@@ -144,7 +165,7 @@ def convert_boxes_to_pooler_format(
     return pooler_fmt_boxes
 
 
-class ROIPooler(nn.Module):
+class ROIPooler(nn.Module, BuildModule):
     def __init__(
         self,
         scales: List[float],
@@ -183,19 +204,28 @@ class ROIPooler(nn.Module):
         self.output_size = output_size
 
         if type == "ROIAlign":
-            self.level_poolers = nn.ModuleList(
-                ROIAlign(
-                    output_size, spatial_scale=scale, sampling_ratio=sampling_ratio, aligned=False
-                )
-                for scale in scales
+            self.level_poolers = nn.ModuleList([
+                    ROIAlign.build(
+                        ROIAlignConf(
+                            output_size=output_size,
+                            spatial_scale=scale,
+                            sampling_ratio=sampling_ratio,
+                            aligned=False
+                        )
+                    ) for scale in scales
+                ]
             )
         elif type == "ROIAlignV2":
-            self.level_poolers = nn.ModuleList(
-                ROIAlign(
-                    output_size, spatial_scale=scale, sampling_ratio=sampling_ratio, aligned=True
-                )
-                for scale in scales
-            )
+            self.level_poolers = nn.ModuleList([
+                ROIAlign.build(
+                    ROIAlignConf(
+                        output_size=output_size,
+                        spatial_scale=scale,
+                        sampling_ratio=sampling_ratio,
+                        aligned=True
+                    )
+                ) for scale in scales
+            ])
         elif type == "ROIPool":
             self.level_poolers = nn.ModuleList(
                 RoIPool(output_size, spatial_scale=scale) for scale in scales
