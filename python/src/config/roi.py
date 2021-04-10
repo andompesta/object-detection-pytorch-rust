@@ -2,7 +2,6 @@ from typing import List, Optional, Tuple, Union
 from torch import nn
 
 from .matcher import MatcherConf
-from python.src.utils import ShapeSpec
 
 class ROIPoolerConf(object):
     def __init__(
@@ -33,12 +32,6 @@ class ProposalMatcherConf(MatcherConf):
             allow_low_quality_matches=allow_low_quality_matches
         )
 
-
-# class ROIBoxHead(object):
-#     def __init__(
-#             self,
-#             layers = ShapeSpec()
-#     ):
 
 class ROIConf(object):
     def __init__(
