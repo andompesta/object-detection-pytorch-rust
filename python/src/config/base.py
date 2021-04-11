@@ -1,4 +1,7 @@
 import copy
+
+from typing import List
+
 from python.src.utils import ensure_dir, save_data_to_json, load_data_from_json
 from abc import ABC
 

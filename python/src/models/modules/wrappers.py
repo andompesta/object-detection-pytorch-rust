@@ -55,6 +55,15 @@ class Conv2d(torch.nn.Conv2d):
         return x
 
 
+    def _init_weights_(self, module: torch.nn.Module):
+        torch.nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+        if self.bias is not None:
+            torch.nn.init.constant_(module.bias, 0.)
+        else:
+            torch.nn.init.constant_(module.norm.weight, 1.)
+            torch.nn.init.constant_(module.norm.bias, 0.)
+
+
 def get_norm(norm: str, out_channels: int):
     """
     Args:

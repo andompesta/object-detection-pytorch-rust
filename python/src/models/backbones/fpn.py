@@ -4,18 +4,18 @@ from typing import Dict
 from collections import OrderedDict
 
 from .backbone import Backbone
-from python.src.models.base import InitModule, BuildModule
+from python.src.models.base import BaseModel
 from .res_net import ResNet18
 from python.src.config import FPN18Conf, ResNet18Conf
-from python.src.models.modules import LastLevelMaxPool, FPNTopDownBlock
+from python.src.models.modules import LastLevelMaxPool, FPNTopDownBlock, Conv2d
 from python.src.utils import ShapeSpec
 
-class FPN(InitModule, BuildModule, Backbone):
+class FPN(BaseModel, Backbone):
     def __init__(
             self,
             conf: FPN18Conf
     ):
-        super(FPN, self).__init__()
+        super(FPN, self).__init__(conf)
 
         if isinstance(conf.bottom_up_conf, ResNet18Conf):
             self.bottom_up = ResNet18.build(
@@ -95,10 +95,22 @@ class FPN(InitModule, BuildModule, Backbone):
         }
 
     def _init_weights_(self, module: nn.Module):
-        if hasattr(module, "init_weights"):
-            module.init_weights()
+        if isinstance(module, nn.Conv2d) or isinstance(module, Conv2d):
+            nn.init.xavier_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.)
+
+        elif isinstance(module, nn.BatchNorm2d):
+            nn.init.constant_(module.weight, 1.)
+            nn.init.constant_(module.bias, 0.)
+
+        elif isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, 0, 0.002)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.)
+
         else:
-            print(f"--> forward init for module {module}")
+            print(f"FPN init -> {module}")
 
     @classmethod
     def build(

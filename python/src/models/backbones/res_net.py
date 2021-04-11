@@ -70,16 +70,24 @@ class ResNet18(BaseModel, Backbone):
 
         return output
 
-    def _init_weights_(self, m: nn.Module):
-        if hasattr(m, "init_weights"):
-            m.init_weights()
-        elif isinstance(m, nn.Linear):
-            nn.init.normal_(m.weight, mean=0, std=0.02)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
+    def _init_weights_(self, module: nn.Module):
+        if isinstance(module, nn.Conv2d) or isinstance(module, Conv2d):
+            nn.init.xavier_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.)
+
+        elif isinstance(module, nn.BatchNorm2d):
+            nn.init.constant_(module.weight, 1.)
+            nn.init.constant_(module.bias, 0.)
+
+        elif isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, 0, 0.002)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0.)
 
         else:
-            print(f"--> forward init for module {m}")
+            print(f"Restnet init -> {module}")
+
 
     def output_shapes(self) -> Dict[str, ShapeSpec]:
         return OrderedDict([

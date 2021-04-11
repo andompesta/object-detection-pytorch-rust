@@ -35,7 +35,7 @@ class ROIPoolerConf(object):
 
 class ROIHeadConf(object):
     def __init__(self):
-
+        ...
 
 class ROIConf(object):
     def __init__(

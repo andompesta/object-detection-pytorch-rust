@@ -19,7 +19,7 @@ class BuildModule(torch.nn.Module, metaclass=ABCMeta):
     ):
         ...
 
-class InitModule(torch.nn.Module, metaclass=ABCMeta):
+class InitModule(BuildModule):
     def __init__(self, *args, **kwargs):
         super(InitModule, self).__init__()
 

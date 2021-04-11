@@ -165,7 +165,7 @@ def convert_boxes_to_pooler_format(
     return pooler_fmt_boxes
 
 
-class ROIPooler(nn.Module, BuildModule):
+class ROIPooler(BuildModule):
     def __init__(
         self,
         scales: List[float],

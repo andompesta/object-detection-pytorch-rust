@@ -36,7 +36,7 @@ class LastLevelMaxPool(nn.Module):
             padding=self.padding
         )
 
-class FPNTopDownBlock(InitModule, BuildModule):
+class FPNTopDownBlock(InitModule):
     def __init__(
             self,
             lateral_shape: ShapeSpec,
@@ -72,8 +72,8 @@ class FPNTopDownBlock(InitModule, BuildModule):
         self.scale_factor = 2
 
     def _init_weights_(self, module: nn.Module):
-        if isinstance(module, nn.Conv2d):
-            nn.init.xavier_normal_(module.weight)
+        if isinstance(module, nn.Conv2d) or isinstance(module, Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
             if self.use_bias:
                 nn.init.constant_(module.bias, 0.)
 
