@@ -8,7 +8,7 @@ from python.src.models import InitModule, BuildModule
 from python.src.utils import ShapeSpec
 from .wrappers import Conv2d, get_norm
 
-class LastLevelMaxPool(nn.Module):
+class LastLevelMaxPool(BuildModule):
     """
     This module is used in the original FPN to generate a downsampled
     P6 feature from P5.
@@ -16,14 +16,18 @@ class LastLevelMaxPool(nn.Module):
 
     def __init__(
             self,
-            conf: LastLevelMaxPoolConf
+            num_levels: int,
+            in_feature: str,
+            kernel_size: int,
+            stride: int,
+            padding: int
     ):
         super().__init__()
-        self.num_levels = conf.num_levels
-        self.in_feature = conf.in_feature
-        self.kernel_size = conf.kernel_size
-        self.stride = conf.stride
-        self.padding = conf.padding
+        self.num_levels = num_levels
+        self.in_feature = in_feature
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
 
     def forward(
             self,
@@ -34,6 +38,18 @@ class LastLevelMaxPool(nn.Module):
             kernel_size=self.kernel_size,
             stride=self.stride,
             padding=self.padding
+        )
+    @classmethod
+    def build(
+            cls,
+            conf: LastLevelMaxPoolConf,
+    ):
+        return cls(
+            num_levels=conf.num_levels,
+            in_feature=conf.in_feature,
+            kernel_size=conf.kernel_size,
+            stride=conf.stride,
+            padding=conf.padding,
         )
 
 class FPNTopDownBlock(InitModule):

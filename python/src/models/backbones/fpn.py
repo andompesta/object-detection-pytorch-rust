@@ -22,39 +22,45 @@ class FPN(BaseModel, Backbone):
                 conf.bottom_up_conf
             )
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(f"bottom up architecture {type(conf.bottom_up_conf)} not implemented yet")
 
         input_shapes = self.bottom_up.output_shapes()
 
         self.in_features = conf.in_features
-        out_features = []
-        layers_name = []
+        self._out_features = []
+        self._in_out_features = OrderedDict()
+        self._layers_map = OrderedDict()
 
-        strides = [input_shapes[f].stride for f in self.in_features]
         in_channels_per_feature = [input_shapes[f].out_channels for f in self.in_features]
 
-        # TODO: check if topdown order need to be reversed
-        for idx, (layer_cfg, in_channels) in enumerate(zip(conf.layers, in_channels_per_feature)):
+        for idx, (layer_cfg, in_channels, bottom_up_name) in enumerate(zip(
+                conf.layers,
+                in_channels_per_feature,
+                self.bottom_up.layers_name
+        )):
             assert layer_cfg.lateral_shape.in_channels == in_channels, \
                 f"Miss-match bottom_up shape {in_channels} \t vs \t topdown shape {layer_cfg.lateral_shape.in_channels}"
 
             name = f"fpn{idx + 1}"
             self.add_module(name, FPNTopDownBlock.build(layer_cfg))
-            layers_name.append(name)
-            out_features.append(f"p{idx+1}")
-            assert out_features[-1] in conf.out_features
+            self._layers_map[bottom_up_name] = name
+            self._in_out_features[bottom_up_name] = f"p{idx+1}"
+            if f"p{idx+1}" in conf.out_features:
+                self._out_features.append(f"p{idx+1}")
 
-        self.top_block = LastLevelMaxPool(conf.top_block)
-        out_features.append(f"p{idx + 2}")
-        assert out_features[-1] in conf.out_features
+        self.top_block = LastLevelMaxPool.build(conf.top_block)
+        assert self.top_block.in_feature == self._in_out_features[next(reversed(self._in_out_features))]
+        self._in_out_features[self.top_block.in_feature] = f"p{idx + 2}"
+        if f"p{idx + 2}" in conf.out_features:
+            self._out_features.append(f"p{idx + 2}")
+
+
+        strides = dict([(self._in_out_features[f], input_shapes[f].stride) for f in self.in_features])
         for s in range(idx + 1, idx + 1 + self.top_block.num_levels):
-            strides.append(2 ** (s + 1))
+            strides[self._in_out_features[self.top_block.in_feature]] = 2 ** (s + 1)
 
-        self._out_features = out_features
-        self._layer_names = layers_name[::-1]
-        self._out_feature_strides = {f"p{i + 1}": s for i, s in enumerate(strides)}
+        self._out_feature_strides = strides
         self._out_feature_channels = {k: conf.out_channels for k in self._out_features}
-
         self._fuse_type = conf.fuse_type
 
 
@@ -62,22 +68,25 @@ class FPN(BaseModel, Backbone):
             self,
             x: Tensor
     ) -> Dict[str, Tensor]:
-        bottom_up_features = self.bottom_up(x)
-        xs = [bottom_up_features[f] for f in self.in_features[::-1]]
+        bottom_up_outputs = self.bottom_up(x)
+        bottom_up_outputs = OrderedDict(reversed(bottom_up_outputs.items()))
         results = OrderedDict()
 
         prev = None
-        for idx, (name, x) in enumerate(zip(self._layer_names, xs)):
-            top_down_layer = getattr(self, name)
-            x, prev = top_down_layer(x, prev)
-            results[self._out_features[len(self._layer_names) - idx - 1]] = x
+        for idx, (bottom_up_name, bottom_up_output) in enumerate(bottom_up_outputs.items()):
+            top_down_name = self._layers_map[bottom_up_name]
+            top_down_layer = getattr(self, top_down_name)
+            x, prev = top_down_layer(bottom_up_output, prev)
+            results[self._in_out_features[bottom_up_name]] = x
 
-        top_block_in_feature = bottom_up_features.get(self.top_block.in_feature, None)
+        top_block_in_feature = bottom_up_outputs.get(self.top_block.in_feature, None)
         if top_block_in_feature is None:
-            top_block_in_feature = results[next(iter(results))]
-        results[self._out_features[-1]] = self.top_block(top_block_in_feature)
+            top_block_in_feature = results[self.top_block.in_feature]
+        results[self._in_out_features[self.top_block.in_feature]] = self.top_block(top_block_in_feature)
 
-        assert len(self._out_features) == len(results.keys())
+        for o_feature in self._out_features:
+            assert o_feature in results
+
         return results
 
 

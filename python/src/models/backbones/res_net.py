@@ -52,6 +52,7 @@ class ResNet18(BaseModel, Backbone):
             self,
             x: Tensor
     ) -> Dict[str, Tensor]:
+        assert x.dim() == 4, f"accepted input is (N, C, H, W), but only {x.dim()} dimensions"
         output = OrderedDict()
         x = self.stem(x)
 

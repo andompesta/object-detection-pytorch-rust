@@ -33,16 +33,16 @@ if __name__ == '__main__':
     x = preprocess_image_imagenet(
         os.path.join(
             settings.get("data_dir"),
-            "imagenet",
-            "dog.jpg"
+            "coco",
+            "input.jpg"
         )
     )
 
-    IDX_TO_LABELS = get_idx_to_labels(os.path.join(
-        settings.get("data_dir"),
-        "imagenet",
-        "imagenet_classes.txt"
-    ))
+    # IDX_TO_LABELS = get_idx_to_labels(os.path.join(
+    #     settings.get("data_dir"),
+    #     "imagenet",
+    #     "imagenet_classes.txt"
+    # ))
 
     with torch.no_grad():
         logits = model(x)

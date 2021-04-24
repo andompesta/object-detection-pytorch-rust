@@ -9,7 +9,7 @@ class LastLevelConf(object):
     def __init__(
             self,
             num_levels: int = 1,
-            in_feature: str = "p5"
+            in_feature: str = "p4"
     ):
         self.num_levels = num_levels
         self.in_feature = in_feature
