@@ -1,0 +1,8 @@
+{
+    "python.pythonPath": "/home/andompesta/miniconda3/envs/omnivisual/bin/python",
+    "debug.console.fontFamily": "Cascadia Code Light",
+    "debug.console.fontSize": 15,
+    "debug.console.lineHeight": 21,
+    "python.linting.enabled": true,
+    "python.linting.pylintArgs": ["--extension-pkg-whitelist=cv2"]
+}

@@ -13,8 +13,7 @@ def get_idx_to_labels(path_: str) -> Dict[int, str]:
 
     return dict([(idx, c) for idx, c in enumerate(categories)])
 
-if __name__ == '__main__':
-
+def run():
     # conf = ResNet18Conf(num_classes=1000)
     # model = ResNet18.load(
     #     conf,
@@ -52,3 +51,6 @@ if __name__ == '__main__':
     for idx, (p, c) in enumerate(zip(top5_prob.squeeze(), top5_catid.squeeze())):
         print(IDX_TO_LABELS[c.item()], p.item())
 
+
+if __name__ == '__main__':
+    run()

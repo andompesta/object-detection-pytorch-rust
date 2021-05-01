@@ -30,6 +30,7 @@ LayerSpec = namedtuple("LayerSpec", [
     "norm"
 ])
 
+
 def subsample_labels(
         labels: torch.Tensor,
         num_samples: int,
@@ -75,12 +76,12 @@ def subsample_labels(
     return pos_idx, neg_idx
 
 
-
 def is_tracing():
     if torch.jit.is_scripting():
         return False
     else:
         return torch.__version__[:3] >= '1.7' and torch.jit.is_tracing()
+
 
 def cat(tensors: List[torch.Tensor], dim: int = 0):
     """
@@ -90,6 +91,7 @@ def cat(tensors: List[torch.Tensor], dim: int = 0):
     if len(tensors) == 1:
         return tensors[0]
     return torch.cat(tensors, dim)
+
 
 def batched_nms(
         boxes: torch.Tensor,
@@ -116,6 +118,7 @@ def batched_nms(
     keep = keep[scores[keep].argsort(descending=True)]
     return keep
 
+
 def nonzero_tuple(x):
     """
     A 'as_tuple=True' version of torch.nonzero to support torchscript.
@@ -128,33 +131,40 @@ def nonzero_tuple(x):
     else:
         return x.nonzero(as_tuple=True)
 
+
 def ensure_dir(path_: str) -> str:
     dir = path.dirname(path_)
     if not path.exists(dir):
         makedirs(dir)
     return path_
 
-def save_obj_to_file(path_:str, obj:object):
+
+def save_obj_to_file(path_: str, obj: object):
     with open(ensure_dir(path_), "wb") as writer:
         pickle.dump(obj, writer, protocol=2)
+
 
 def load_obj_from_file(path_: str) -> object:
     with open(path_, "rb") as reader:
         obj = pickle.load(reader)
     return obj
 
-def save_data_to_json(path_:str, data: object):
+
+def save_data_to_json(path_: str, data: object):
     with open(ensure_dir(path_), "w", encoding="utf-8") as w:
         json.dump(data, w, indent=2, sort_keys=True, default=lambda o: o.__dict__)
 
-def load_data_from_json(path_:str) -> object:
+
+def load_data_from_json(path_: str) -> object:
     with open(path_, "r", encoding="utf-8") as r:
         return json.load(r)
 
-def save_checkpoint(path_:str, state: Dict, is_best: bool, filename="checkpoint.pth.tar"):
+
+def save_checkpoint(path_: str, state: Dict, is_best: bool, filename="checkpoint.pth.tar"):
     torch.save(state, ensure_dir(path.join(path_, filename)))
     if is_best:
         shutil.copy(path.join(path_, filename), path.join(path_, "model_best.pth.tar"))
+
 
 def show_image(path_: str):
     im = cv2.imread(path_)

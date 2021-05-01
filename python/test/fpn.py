@@ -1,5 +1,5 @@
-from python.src.models import FPN
-from python.src.config import FPN18Conf
+from src.models import FPN
+from src.config import FPN18Conf
 
 if __name__ == '__main__':
     conf = FPN18Conf(num_classes=1000)

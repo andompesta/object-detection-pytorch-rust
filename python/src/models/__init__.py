@@ -1,7 +1,7 @@
-from python.src.models.base import BaseModel, InitModule, BuildModule
-from python.src.structures.boxes import Boxes
-from python.src.models.rpn import RegionProposalNetwork
-from python.src.models.backbones import FPN, ResNet18
+from .base import BaseModel, InitModule, BuildModule
+from python.src.structures import Boxes
+from .rpn import RegionProposalNetwork
+from .backbones import FPN, ResNet18
 
 
 __all__ = [
